@@ -1,0 +1,16 @@
+#cloud-config
+# Baked into the installer ISO by scripts/build-iso.sh (ADR 0008).
+#
+# This is not a node configuration: it only runs the dispatcher once the
+# network is up. The dispatcher stages the node's real configuration in
+# /oem, then the auto-installer proceeds with those fragments.
+
+install:
+  auto: true
+  reboot: true
+
+stages:
+  network:
+    - name: "Dispatch node configuration"
+      commands:
+        - /run/initramfs/live/dispatch/dispatch.sh
