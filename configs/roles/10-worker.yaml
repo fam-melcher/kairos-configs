@@ -1,0 +1,10 @@
+#cloud-config
+# Role fragment: K3s worker (agent).
+# K3S_URL points at the control plane; K3S_TOKEN comes from secrets/ at
+# deployment time and must never appear in this file
+# (docs/adr/0005-secret-management.md).
+
+k3s-agent:
+  enabled: true
+  env:
+    K3S_URL: "https://REPLACE_WITH_CONTROL_PLANE_ADDRESS:6443"
