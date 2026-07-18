@@ -1,0 +1,12 @@
+#cloud-config
+# Role fragment: K3s server joining the existing cluster through the
+# kube-vip VIP — not through a node IP, so no single node becomes a fixed
+# dependency. The cluster token is injected at dispatch time (ADR 0008).
+
+k3s:
+  enabled: true
+  args:
+    - --server=https://192.168.1.11:6443
+    - --disable=traefik
+    - --disable=servicelb
+    - --tls-san=192.168.1.11
