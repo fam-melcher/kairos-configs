@@ -41,9 +41,26 @@ fail() {
     exit 1
 }
 
-command -v docker > /dev/null || fail "docker not found"
+# Pick the first container engine whose daemon actually responds; a CLI on
+# PATH without a running backend is useless for the build.
+detect_engine() {
+    local candidate
+
+    for candidate in docker podman nerdctl; do
+        command -v "${candidate}" > /dev/null || continue
+        "${candidate}" info > /dev/null 2>&1 || continue
+        echo "${candidate}"
+        return 0
+    done
+
+    return 1
+}
+
 command -v curl > /dev/null || fail "curl not found"
-docker info > /dev/null 2>&1 || fail "docker daemon not reachable — is it running?"
+
+engine="$(detect_engine)" \
+    || fail "no running container engine found (tried: docker, podman, nerdctl)"
+echo "build-iso: container engine: ${engine}"
 [[ -r "${AGE_KEY_FILE}" ]] || fail "age key not readable: ${AGE_KEY_FILE}"
 
 branch="${1:-$(git -C "${repo_root}" rev-parse --abbrev-ref HEAD)}"
@@ -82,19 +99,33 @@ cp "${repo_root}/iso/bootstrap.yaml" "${build_dir}/bootstrap.yaml"
 
 # --- Build the ISO ------------------------------------------------------------
 
+# The state dir must live in a named volume: AuroraBoot chowns files to
+# root while dumping the rootfs, which fails on a macOS bind mount.
+state_volume="kairos-iso-state"
+
 echo "build-iso: image=${KAIROS_IMAGE}"
 echo "build-iso: config branch=${branch}"
 
-docker run --rm --privileged \
-    -v "${build_dir}:/tmp/auroraboot" \
-    -v /var/run/docker.sock:/var/run/docker.sock \
+"${engine}" volume rm -f "${state_volume}" > /dev/null 2>&1 || true
+"${engine}" volume create "${state_volume}" > /dev/null
+
+"${engine}" run --rm --privileged \
+    -v "${state_volume}:/state" \
+    -v "${build_dir}:/input:ro" \
     "${AURORABOOT_IMAGE}" \
     --set "container_image=${KAIROS_IMAGE}" \
     --set "disable_http_server=true" \
     --set "disable_netboot=true" \
-    --set "state_dir=/tmp/auroraboot" \
-    --set "iso.data=/tmp/auroraboot/overlay" \
-    --cloud-config /tmp/auroraboot/bootstrap.yaml
+    --set "state_dir=/state" \
+    --set "iso.overlay_iso=/input/overlay" \
+    --cloud-config /input/bootstrap.yaml
+
+mkdir -p "${build_dir}/iso"
+"${engine}" run --rm \
+    -v "${state_volume}:/state:ro" \
+    -v "${build_dir}/iso:/out" \
+    busybox sh -c 'cp /state/iso/*.iso /out/'
+"${engine}" volume rm -f "${state_volume}" > /dev/null
 
 echo
 echo "build-iso: done — $(ls "${build_dir}"/iso/*.iso 2> /dev/null || echo 'no ISO found, check output above')"
