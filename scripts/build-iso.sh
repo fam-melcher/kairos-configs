@@ -43,6 +43,7 @@ fail() {
 
 command -v docker > /dev/null || fail "docker not found"
 command -v curl > /dev/null || fail "curl not found"
+docker info > /dev/null 2>&1 || fail "docker daemon not reachable — is it running?"
 [[ -r "${AGE_KEY_FILE}" ]] || fail "age key not readable: ${AGE_KEY_FILE}"
 
 branch="${1:-$(git -C "${repo_root}" rev-parse --abbrev-ref HEAD)}"
