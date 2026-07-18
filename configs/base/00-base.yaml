@@ -1,0 +1,30 @@
+#cloud-config
+# Base fragment shared by every node. Merge order: 00-base < 10-role < 20-node
+# (see docs/adr/0004-kairos-configuration-strategy.md).
+
+users:
+  - name: kairos
+    groups:
+      - admin
+    # Password login stays disabled; access is key-based only.
+    # Kairos resolves the github: shorthand to the user's public keys.
+    ssh_authorized_keys:
+      - github:Vonor
+
+install:
+  # Node fragments set the concrete target device.
+  auto: true
+  reboot: true
+
+# Keep the immutable design honest: no interactive changes on the host.
+stages:
+  boot:
+    - name: "Disable SSH password authentication"
+      files:
+        - path: /etc/ssh/sshd_config.d/10-hardening.conf
+          permissions: 0644
+          owner: 0
+          group: 0
+          content: |
+            PasswordAuthentication no
+            PermitRootLogin no

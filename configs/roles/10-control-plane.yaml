@@ -1,0 +1,11 @@
+#cloud-config
+# Role fragment: K3s control plane (server).
+# The cluster token comes from secrets/ at deployment time and must never
+# appear in this file (docs/adr/0005-secret-management.md).
+
+k3s:
+  enabled: true
+  args:
+    # Traefik and ServiceLB are managed via GitOps later; keep the server lean.
+    - --disable=traefik
+    - --disable=servicelb
