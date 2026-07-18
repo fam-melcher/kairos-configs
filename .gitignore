@@ -1,0 +1,22 @@
+# OS / editor noise
+.DS_Store
+*.swp
+*~
+
+# Build artifacts and images
+*.iso
+*.img
+
+# Decrypted or plaintext secret material — never commit
+*.dec
+*.dec.yaml
+*.plain
+*.plain.yaml
+*.agekey
+key.txt
+
+# secrets/ only allows encrypted SOPS files and documentation
+secrets/**
+!secrets/**/
+!secrets/README.md
+!secrets/**/*.sops.yaml
