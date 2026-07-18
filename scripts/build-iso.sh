@@ -17,7 +17,9 @@
 #           (default: currently checked-out branch)
 #
 # Environment overrides:
-#   KAIROS_IMAGE      Kairos base image        (default: pinned below, arm64)
+#   ARCH              target node architecture: amd64 or arm64 (default: amd64,
+#                     the dev VM cluster runs on Hyper-V/Intel)
+#   KAIROS_IMAGE      Kairos base image        (default: pinned below, per ARCH)
 #   AURORABOOT_IMAGE  AuroraBoot builder image (default: pinned below)
 #   AGE_KEY_FILE      cluster age private key  (default: ~/.config/sops/age/homelab-dev-cluster.txt)
 #   SOPS_VERSION      static sops release bundled into the ISO
@@ -26,20 +28,27 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-KAIROS_IMAGE="${KAIROS_IMAGE:-quay.io/kairos/ubuntu:24.04-standard-arm64-generic-v3.7.2-k3s-v1.34.3-k3s3}"
-AURORABOOT_IMAGE="${AURORABOOT_IMAGE:-quay.io/kairos/auroraboot:v0.25.2}"
-AGE_KEY_FILE="${AGE_KEY_FILE:-${HOME}/.config/sops/age/homelab-dev-cluster.txt}"
-SOPS_VERSION="${SOPS_VERSION:-v3.13.2}"
-# The dispatcher runs inside the (arm64) live system, not on the build host.
-sops_asset="sops-${SOPS_VERSION}.linux.arm64"
-sops_url="https://github.com/getsops/sops/releases/download/${SOPS_VERSION}"
-
-config_repo_url="https://raw.githubusercontent.com/fam-melcher/kairos-configs"
-
 fail() {
     echo "build-iso: FATAL: ${1}" >&2
     exit 1
 }
+
+ARCH="${ARCH:-amd64}"
+case "${ARCH}" in
+    amd64 | arm64) ;;
+    *) fail "unsupported ARCH '${ARCH}' (amd64 or arm64)" ;;
+esac
+
+KAIROS_IMAGE="${KAIROS_IMAGE:-quay.io/kairos/ubuntu:24.04-standard-${ARCH}-generic-v3.7.2-k3s-v1.34.3-k3s3}"
+AURORABOOT_IMAGE="${AURORABOOT_IMAGE:-quay.io/kairos/auroraboot:v0.25.2}"
+AGE_KEY_FILE="${AGE_KEY_FILE:-${HOME}/.config/sops/age/homelab-dev-cluster.txt}"
+SOPS_VERSION="${SOPS_VERSION:-v3.13.2}"
+# The dispatcher and sops run inside the target's live system, not on the
+# build host — the bundled binary must match ARCH, not the host.
+sops_asset="sops-${SOPS_VERSION}.linux.${ARCH}"
+sops_url="https://github.com/getsops/sops/releases/download/${SOPS_VERSION}"
+
+config_repo_url="https://raw.githubusercontent.com/fam-melcher/kairos-configs"
 
 # Pick the first container engine whose daemon actually responds; a CLI on
 # PATH without a running backend is useless for the build.
