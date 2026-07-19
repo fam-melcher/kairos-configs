@@ -26,6 +26,39 @@ fail() {
 curl_bin="curl"
 command -v curl > /dev/null 2>&1 || curl_bin="${script_dir}/curl"
 
+# probe <url> <output-file> — single silent attempt, used while polling for
+# a configuration that may not exist yet (a 404 is expected, not an error).
+probe() {
+    "${curl_bin}" -fsSL "${1}" -o "${2}" 2> /dev/null
+}
+
+# Full-screen status shown while waiting for the node's configuration to
+# appear in the repository. Redrawn on every poll so the node ID and the
+# machine facts an operator needs never scroll away.
+status_screen() {
+    _route="$(ip -4 route get 1.1.1.1 2> /dev/null | head -1)"
+    _ip="$(echo "${_route}" | sed -n 's/.* src \([0-9.]*\).*/\1/p')"
+    _iface="$(echo "${_route}" | sed -n 's/.* dev \([^ ]*\).*/\1/p')"
+    _mac="$(cat "/sys/class/net/${_iface}/address" 2> /dev/null)"
+
+    printf '\033[2J\033[H'
+    echo "=============================================================="
+    echo " Kairos installer — waiting for node configuration"
+    echo "=============================================================="
+    echo " Node ID      : ${node_id}"
+    echo " Product UUID : ${uuid}"
+    echo " IP address   : ${_ip:-none} (iface ${_iface:-?}, MAC ${_mac:-?})"
+    echo " Disks        :"
+    lsblk -dno NAME,SIZE,TYPE,MODEL 2> /dev/null | awk '$3 == "disk" {printf "   /dev/%-10s %8s  %s\n", $1, $2, $4}' \
+        || sed -n '3,9p' /proc/partitions
+    echo " Config URL   : ${list_url}"
+    echo "--------------------------------------------------------------"
+    echo " To provision this machine, run in the config repository:"
+    echo "   scripts/add-node.sh ${node_id} [join|init] [install-device]"
+    echo " then commit and push. Next check in 60s (poll #${poll})."
+    echo "=============================================================="
+}
+
 # fetch <url> <output-file> — up to 3 attempts, tolerates slow DHCP/DNS.
 fetch() {
     _attempt=1
@@ -50,19 +83,21 @@ fetch() {
 
 [ -n "${CONFIG_BASE_URL:-}" ] || fail "CONFIG_BASE_URL not set in dispatch.env"
 
-node_id="node-$(cut -d- -f1 "${uuid_file}" | tr '[:upper:]' '[:lower:]')"
+uuid="$(cat "${uuid_file}")"
+node_id="node-$(echo "${uuid}" | cut -d- -f1 | tr '[:upper:]' '[:lower:]')"
 echo "dispatch: node id is ${node_id}"
 echo "dispatch: using $(${curl_bin} --version | head -1)"
 
 # An unknown machine is not an error: keep polling so an operator can read
-# the node id from the console, commit nodes/<id>/ to the repository
+# the node id from the status screen, commit nodes/<id>/ to the repository
 # (scripts/add-node.sh), and have the installation continue on the next
 # poll — without another boot.
 list_file="$(mktemp)"
 list_url="${CONFIG_BASE_URL}/nodes/${node_id}/fragments.list"
-until fetch "${list_url}" "${list_file}"; do
-    echo "dispatch: no configuration for ${node_id}"
-    echo "dispatch: create nodes/${node_id}/ in the repository — retrying in 60s"
+poll=1
+until probe "${list_url}" "${list_file}"; do
+    status_screen
+    poll=$((poll + 1))
     sleep 60
 done
 
