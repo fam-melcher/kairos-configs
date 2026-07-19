@@ -90,9 +90,17 @@ EOF
 
 echo "dispatch: configuration for ${node_id} staged in ${oem_dir}"
 
-# Trigger the installation ourselves instead of relying on the installer
-# service having started after the staging above (its config snapshot is
-# taken at service start — a race we lose on fast boots). kairos-agent
-# re-scans all config sources including /oem at this point.
+# Hand the installation over to a dedicated transient unit instead of
+# blocking this yip stage: steps of a stage run interleaved, so blocking
+# here stalls the datasource sentinel cleanup and the boot chain behind
+# cos-setup-network. Before that:
+# - stop the interactive installer services so nothing races us to the disk
+# - clear the stale datasource sentinel (no datasource exists on this boot
+#   path; the installer would otherwise wait 5 minutes for it)
 echo "dispatch: starting installation"
-exec kairos-agent install
+systemctl stop kairos-webui.service kairos-installer.service 2> /dev/null || true
+rm -f /run/.userdata_load
+exec systemd-run --unit=dispatch-install \
+    --property=StandardOutput=journal+console \
+    --property=StandardError=journal+console \
+    /usr/bin/kairos-agent install
