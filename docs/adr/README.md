@@ -16,6 +16,7 @@ reference their replacement.
 | 0006 | [HA control plane topology with kube-vip](0006-ha-control-plane-topology.md) | Accepted |
 | 0007 | [Node identity derived from product UUID](0007-node-identity.md)   | Accepted |
 | 0008 | [Generic installer ISO with config self-dispatch](0008-installer-config-dispatch.md) | Accepted |
+| 0009 | [Branch and environment strategy](0009-branch-environment-strategy.md) | Accepted |
 
 ## Creating a new ADR
 

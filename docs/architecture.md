@@ -48,9 +48,12 @@ layer configuration instead of duplicating it.
 ├── configs/
 │   ├── base/
 │   │   └── 00-base.yaml    # configuration shared by every node
-│   └── roles/
-│       ├── 10-server-init.yaml   # first server: --cluster-init (one per cluster)
-│       ├── 10-server-join.yaml   # all other servers: join via VIP
+│   ├── roles/              # environment-neutral role fragments
+│   │   ├── 10-server-init.yaml   # first server: --cluster-init (one per cluster)
+│   │   └── 10-server-join.yaml   # all other servers
+│   └── env/                # BRANCH-SPECIFIC environment values (ADR 0009)
+│       ├── 12-cluster.yaml       # VIP/tls-san via K3s config drop-in
+│       ├── 13-join.yaml          # join target (join nodes only)
 │       └── 15-kube-vip.yaml      # control plane VIP (auto-deploy manifest)
 ├── nodes/                  # one directory per node (ADR 0007)
 │   └── node-<id>/
@@ -80,7 +83,8 @@ Configuration is split into layers, combined per node via its
 | Layer | Location                          | Prefix | Content                                        |
 |-------|-----------------------------------|--------|------------------------------------------------|
 | Base  | `configs/base/00-base.yaml`       | `00-`  | users, SSH keys, install defaults, OS settings |
-| Role  | `configs/roles/10-*.yaml`, `15-*` | `10-`/`15-` | K3s server settings, kube-vip              |
+| Role  | `configs/roles/10-*.yaml`         | `10-`  | K3s role (init/join), environment-neutral      |
+| Env   | `configs/env/1[2-5]-*.yaml`       | `12-`–`15-` | VIP, join target, kube-vip — branch-specific (ADR 0009) |
 | Node  | `nodes/node-<id>/20-*.yaml`       | `20-`  | hostname, install device, network              |
 | Token | staged by the dispatcher          | `30-`  | K3s cluster token (never committed)            |
 

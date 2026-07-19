@@ -11,7 +11,8 @@ private age key.
 
 ```text
 configs/base/      cloud-config shared by every node (00- prefix)
-configs/roles/     server role fragments, kube-vip (10-/15- prefix)
+configs/roles/     environment-neutral role fragments (10- prefix)
+configs/env/       branch-specific environment values (12-/13-/15-, ADR 0009)
 nodes/<node-id>/   node fragment + fragments.list (20- prefix, ADR 0007)
 templates/         starting points for new node fragments
 secrets/           SOPS-encrypted material only (enforced by .gitignore)
@@ -49,9 +50,14 @@ No plaintext secrets, ever. Bootstrap secrets are SOPS/age-encrypted under
 
 ## Contributing
 
-- No direct commits to `main`; every change via feature branch and pull request.
-- No force pushes, no history rewriting.
+- `main` = production, `dev-vm-cluster` = permanent test environment.
+- Shared changes: feature branch off `main` → merge into `dev-vm-cluster`
+  for testing → pull request of the feature branch into `main`.
+- Node directories, `configs/env/`, `secrets/` and `.sops.yaml` are
+  branch-specific and never merged across environments (ADR 0009).
+- No direct commits to `main`, no force pushes, no history rewriting.
 - [Conventional Commits](https://www.conventionalcommits.org/).
 - Non-trivial architecture decisions require an [ADR](docs/adr/README.md).
 
-Workflow details: [ADR 0003](docs/adr/0003-git-workflow.md).
+Workflow details: [ADR 0003](docs/adr/0003-git-workflow.md) and
+[ADR 0009](docs/adr/0009-branch-environment-strategy.md).
