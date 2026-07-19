@@ -95,10 +95,12 @@ Details: [ADR 0004](adr/0004-kairos-configuration-strategy.md).
 
 ## Node Identity
 
-Node ID = `node-` + first segment of the SMBIOS product UUID, lowercase
-(`/sys/class/dmi/id/product_uuid`). The ID names the node directory, its
-fragment, and the hostname. See [ADR 0007](adr/0007-node-identity.md),
-including the open point for Apple Silicon hardware.
+Node ID = `node-` + first 8 hex of SHA-256 over the lowercased SMBIOS
+product UUID (`/sys/class/dmi/id/product_uuid`). The ID names the node
+directory, its fragment, and the hostname. See
+[ADR 0010](adr/0010-node-identity-hash.md) (and the superseded
+[ADR 0007](adr/0007-node-identity.md), including the open point for Apple
+Silicon hardware).
 
 ## Provisioning Workflow
 

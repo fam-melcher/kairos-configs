@@ -1,6 +1,6 @@
 # 0007 — Node identity derived from product UUID
 
-- Status: Accepted
+- Status: Superseded by [0010](0010-node-identity-hash.md)
 - Date: 2026-07-19
 
 ## Context

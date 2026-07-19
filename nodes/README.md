@@ -1,9 +1,10 @@
 # Nodes
 
-One directory per node, named after the node ID (ADR 0007):
+One directory per node, named after the node ID (ADR 0010):
 
 ```sh
-node-$(cut -d- -f1 /sys/class/dmi/id/product_uuid | tr '[:upper:]' '[:lower:]')
+node-$(cat /sys/class/dmi/id/product_uuid | tr -d '[:space:]' \
+    | tr '[:upper:]' '[:lower:]' | sha256sum | cut -c1-8)
 ```
 
 Each directory contains:
