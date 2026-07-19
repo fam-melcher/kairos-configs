@@ -4,7 +4,7 @@
 # development ISO key can never decrypt production secrets.
 #
 # Recipients (production / main):
-#   age1t90ad9...  engineer key (Michael), private key in ~/.config/sops/age/keys.txt
+#   age1t90ad9...  engineer key, private key in .keys/engineer.agekey
 #   age1rcc96p...  prod cluster key, embedded in the production installer ISO (ADR 0008)
 #
 # After changing recipients: sops updatekeys secrets/*.sops.yaml

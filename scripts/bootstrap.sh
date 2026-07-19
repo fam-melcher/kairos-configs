@@ -114,7 +114,7 @@ ensure_file ".sops.yaml" <<'EOF'
 # SOPS configuration — see docs/adr/0005-secret-management.md.
 #
 # Encryption is not active yet. To enable:
-#   1. Generate a key pair:  age-keygen -o ~/.config/sops/age/keys.txt
+#   1. Generate a key pair:  age-keygen -o .keys/engineer.agekey
 #   2. Enter the *public* key below and remove the comment markers.
 #
 # creation_rules:
