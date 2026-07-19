@@ -1,0 +1,17 @@
+#cloud-config
+# Environment fragment — BRANCH-SPECIFIC (ADR 0009).
+#
+# Join target for servers joining the existing cluster: listed in the
+# fragments.list of join nodes only — the cluster-init node must not carry
+# a server entry.
+
+stages:
+  initramfs:
+    - name: "K3s join target"
+      files:
+        - path: /etc/rancher/k3s/config.yaml.d/20-join.yaml
+          permissions: 0600
+          owner: 0
+          group: 0
+          content: |
+            server: https://192.168.1.10:6443

@@ -14,11 +14,22 @@ users:
 install:
   # Node fragments set the concrete target device.
   auto: true
-  reboot: true
+  # Power off instead of rebooting: on headless machines the powered-down
+  # state is the "installation finished" signal, and it prevents an
+  # accidental reinstall when the boot medium is still attached.
+  reboot: false
+  poweroff: true
 
 # Keep the immutable design honest: no interactive changes on the host.
 stages:
   boot:
+    # Hyper-V guests expose no usable COM port; the image's serial getty
+    # dies with an I/O error every 10s and floods the console with login
+    # prompts. Real hardware (BMC serial consoles) stays untouched.
+    - name: "Disable serial getty on Hyper-V guests"
+      if: '[ "$(systemd-detect-virt)" = "microsoft" ]'
+      commands:
+        - systemctl mask --now serial-getty@ttyS0.service
     - name: "Disable SSH password authentication"
       files:
         - path: /etc/ssh/sshd_config.d/10-hardening.conf

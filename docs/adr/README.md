@@ -13,6 +13,10 @@ reference their replacement.
 | 0003 | [Git workflow and branching](0003-git-workflow.md)                 | Accepted |
 | 0004 | [Kairos configuration strategy](0004-kairos-configuration-strategy.md) | Accepted |
 | 0005 | [Secret management](0005-secret-management.md)                     | Accepted |
+| 0006 | [HA control plane topology with kube-vip](0006-ha-control-plane-topology.md) | Accepted |
+| 0007 | [Node identity derived from product UUID](0007-node-identity.md)   | Accepted |
+| 0008 | [Generic installer ISO with config self-dispatch](0008-installer-config-dispatch.md) | Accepted |
+| 0009 | [Branch and environment strategy](0009-branch-environment-strategy.md) | Accepted |
 
 ## Creating a new ADR
 

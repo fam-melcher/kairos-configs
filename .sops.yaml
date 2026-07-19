@@ -1,9 +1,16 @@
 # SOPS configuration — see docs/adr/0005-secret-management.md.
 #
-# Encryption is not active yet. To enable:
-#   1. Generate a key pair:  age-keygen -o ~/.config/sops/age/keys.txt
-#   2. Enter the *public* key below and remove the comment markers.
+# BRANCH-SPECIFIC FILE (ADR 0009): recipients differ per environment so a
+# development ISO key can never decrypt production secrets.
 #
-# creation_rules:
-#   - path_regex: secrets/.*\.sops\.yaml$
-#     age: age1REPLACE_WITH_PUBLIC_KEY
+# Recipients (production / main):
+#   age1t90ad9...  engineer key (Michael), private key in ~/.config/sops/age/keys.txt
+#   age1rcc96p...  prod cluster key, embedded in the production installer ISO (ADR 0008)
+#
+# After changing recipients: sops updatekeys secrets/*.sops.yaml
+
+creation_rules:
+  - path_regex: secrets/.*\.sops\.yaml$
+    age: >-
+      age1t90ad9cwcpmh6cxazpz6vl2ve3dsqpfgf9085q5ud0vr79lnn4xqsllump,
+      age1rcc96pwzzly0x3kces5krytvn0dfdnrw2u2j8ahdffv49wm34ejql9z232

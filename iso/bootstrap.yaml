@@ -1,0 +1,18 @@
+#cloud-config
+# Baked into the installer ISO by scripts/build-iso.sh (ADR 0008).
+#
+# This file is consumed by the kairos-agent config collector (installer
+# validation, users on the installed system). Its stages would NOT be
+# executed in the live system — the dispatch trigger therefore lives in
+# /system/oem/91-dispatch.yaml via the rootfs overlay.
+#
+# Installation is gated on dispatch success: the dispatcher itself starts
+# `kairos-agent install` after staging /oem, so a machine whose dispatch
+# fails stays in the live system and never half-installs.
+
+users:
+  - name: kairos
+    groups:
+      - admin
+    ssh_authorized_keys:
+      - github:Vonor

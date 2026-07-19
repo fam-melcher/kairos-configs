@@ -1,0 +1,17 @@
+#cloud-config
+# Installed into /system/oem via the ISO rootfs overlay (scripts/build-iso.sh,
+# ADR 0008). yip only executes file-based configs from its scan directories;
+# stages inside the AuroraBoot-baked config.yaml are collected for the
+# installer but never executed in the live system — so the dispatch trigger
+# must live here as a real file.
+#
+# The `if` guard limits execution to the live installer environment: the
+# dispatch payload only exists when booted from the installer ISO, and a
+# present token fragment means dispatch already ran.
+
+stages:
+  network:
+    - name: "Dispatch node configuration"
+      if: '[ -e /run/initramfs/live/dispatch/dispatch.sh ] && [ ! -f /oem/30-k3s-token.yaml ]'
+      commands:
+        - sh -c '/run/initramfs/live/dispatch/dispatch.sh 2>&1 | tee /tmp/dispatch.log > /dev/console'

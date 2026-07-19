@@ -1,0 +1,11 @@
+#cloud-config
+# Role fragment: K3s server joining the existing cluster. The join target
+# (VIP URL) comes from configs/env/13-join.yaml via the node's
+# fragments.list (ADR 0009); the cluster token is injected at dispatch
+# time (ADR 0008).
+
+k3s:
+  enabled: true
+  args:
+    - --disable=traefik
+    - --disable=servicelb

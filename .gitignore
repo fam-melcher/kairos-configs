@@ -6,6 +6,7 @@
 # Build artifacts and images
 *.iso
 *.img
+build/
 
 # Decrypted or plaintext secret material — never commit
 *.dec
@@ -14,6 +15,10 @@
 *.plain.yaml
 *.agekey
 key.txt
+
+# Repo-local private key store (working tree only, never in git).
+# No exceptions below this line — nothing in .keys/ is ever tracked.
+.keys/
 
 # secrets/ only allows encrypted SOPS files and documentation
 secrets/**

@@ -1,0 +1,20 @@
+#cloud-config
+# Environment fragment — BRANCH-SPECIFIC (ADR 0009). main carries the
+# production values, dev-vm-cluster the development values; this file is
+# intentionally different per branch and never merged across environments.
+#
+# Cluster-wide settings for every node of this environment. K3s options go
+# through its config drop-in directory so the role fragments stay free of
+# environment values and remain mergeable between branches.
+
+stages:
+  initramfs:
+    - name: "K3s environment configuration"
+      files:
+        - path: /etc/rancher/k3s/config.yaml.d/10-env.yaml
+          permissions: 0600
+          owner: 0
+          group: 0
+          content: |
+            tls-san:
+              - 192.168.1.10
