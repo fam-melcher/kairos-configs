@@ -94,8 +94,13 @@ echo "dispatch: using $(${curl_bin} --version | head -1)"
 # setup- prefix unambiguously marks unprovisioned live boots.
 setup_name="setup-${node_id#node-}"
 hostnamectl set-hostname "${setup_name}" 2> /dev/null || hostname "${setup_name}" || true
+# reconfigure (full DHCP cycle), not renew: networkd sends the hostname it
+# cached at link setup on renewals, so the new name would never reach the
+# DHCP server. Verified on Hyper-V: renew keeps the old lease name,
+# reconfigure updates it and re-acquires the same address.
 _iface="$(ip -4 route get 1.1.1.1 2> /dev/null | sed -n 's/.* dev \([^ ]*\).*/\1/p')"
-[ -z "${_iface}" ] || networkctl renew "${_iface}" 2> /dev/null || true
+[ -z "${_iface}" ] || networkctl reconfigure "${_iface}" 2> /dev/null || true
+sleep 3
 
 # An unknown machine is not an error: keep polling so an operator can read
 # the node id from the status screen, commit nodes/<id>/ to the repository
