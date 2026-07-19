@@ -137,6 +137,12 @@ EOF
 
 cp "${repo_root}/iso/bootstrap.yaml" "${build_dir}/bootstrap.yaml"
 
+# The dispatch trigger must be a real file in a yip scan directory; stages
+# inside the baked cloud config are not executed in the live system.
+rm -rf "${build_dir}/rootfs-overlay"
+mkdir -p "${build_dir}/rootfs-overlay/system/oem"
+cp "${repo_root}/iso/91-dispatch.yaml" "${build_dir}/rootfs-overlay/system/oem/91-dispatch.yaml"
+
 # --- Build the ISO ------------------------------------------------------------
 
 # The state dir must live in a named volume: AuroraBoot chowns files to
@@ -159,6 +165,7 @@ echo "build-iso: config branch=${branch}"
     --set "disable_netboot=true" \
     --set "state_dir=/state" \
     --set "iso.overlay_iso=/input/overlay" \
+    --set "iso.overlay_rootfs=/input/rootfs-overlay" \
     --cloud-config /input/bootstrap.yaml
 
 mkdir -p "${build_dir}/iso"

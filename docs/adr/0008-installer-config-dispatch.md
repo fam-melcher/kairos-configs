@@ -37,14 +37,21 @@ plaintext or baked into a widely shared image?
 
 Generic ISO with self-dispatch (option 4):
 
-- `iso/bootstrap.yaml` — baked cloud-config; provides SSH access to the
-  live system (debugging) and runs the dispatcher in the `network` stage.
-  It contains no `install:` block: installation is gated on dispatch
-  success — the dispatcher itself starts `kairos-agent install` after
-  staging `/oem` (which the agent scans last and therefore with the
-  highest precedence, also in live mode). Relying on the installer
-  service's start order instead would be a race: it snapshots the merged
-  configuration when it starts, which can happen before staging finishes.
+- `iso/bootstrap.yaml` — baked cloud-config, consumed by the agent's config
+  collector (installer validation, users on the installed system). Verified
+  on hardware: stages inside this file are collected but **never executed**
+  in the live system — yip only runs file-based configs from its scan
+  directories.
+- `iso/91-dispatch.yaml` — the dispatch trigger, injected into
+  `/system/oem/` through the ISO rootfs overlay (a yip scan directory that
+  provably executes at boot). Guarded by an `if` condition so it only fires
+  in the live installer environment.
+- Installation is gated on dispatch success — the dispatcher itself starts
+  `kairos-agent install` after staging `/oem` (which the agent scans last
+  and therefore with the highest precedence, also in live mode). Relying on
+  the installer service's start order instead would be a race: it snapshots
+  the merged configuration when it starts, which can happen before staging
+  finishes.
 - `iso/dispatch.sh` — POSIX-shell dispatcher; fails loudly and leaves the
   machine in the live system if no `nodes/<id>/` exists or any fetch step
   fails. Logs to the console and `/tmp/dispatch.log`. Uses the system curl

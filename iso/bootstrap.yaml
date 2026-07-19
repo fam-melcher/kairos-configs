@@ -1,11 +1,14 @@
 #cloud-config
 # Baked into the installer ISO by scripts/build-iso.sh (ADR 0008).
 #
-# This is not a node configuration. It provides SSH access to the live
-# system (debugging) and runs the dispatcher once the network is up.
-# Installation is deliberately gated on dispatch success: the dispatcher
-# itself starts `kairos-agent install` after staging /oem, so a machine
-# whose dispatch fails stays in the live system and never half-installs.
+# This file is consumed by the kairos-agent config collector (installer
+# validation, users on the installed system). Its stages would NOT be
+# executed in the live system — the dispatch trigger therefore lives in
+# /system/oem/91-dispatch.yaml via the rootfs overlay.
+#
+# Installation is gated on dispatch success: the dispatcher itself starts
+# `kairos-agent install` after staging /oem, so a machine whose dispatch
+# fails stays in the live system and never half-installs.
 
 users:
   - name: kairos
@@ -13,9 +16,3 @@ users:
       - admin
     ssh_authorized_keys:
       - github:Vonor
-
-stages:
-  network:
-    - name: "Dispatch node configuration"
-      commands:
-        - sh -c '/run/initramfs/live/dispatch/dispatch.sh 2>&1 | tee /tmp/dispatch.log > /dev/console'
