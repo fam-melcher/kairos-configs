@@ -107,10 +107,13 @@ One generic installer ISO serves all nodes ([ADR 0008](adr/0008-installer-config
 2. The machine boots the ISO; the dispatcher derives the node ID, fetches
    the fragments named in `nodes/<id>/fragments.list` into `/oem`, decrypts
    the K3s token, and stages it as `30-k3s-token.yaml`.
-3. The Kairos auto-installer applies the staged configuration; the node
-   reboots and starts (or joins) the cluster.
-4. Machines without a `nodes/<id>/` directory stay in the live system —
-   nothing installs by accident.
+3. The Kairos auto-installer applies the staged configuration and powers
+   the machine off. On headless hosts the powered-down state is the
+   "installation finished" signal: remove the boot medium, power on, the
+   node starts (or joins) the cluster.
+4. Machines without a `nodes/<id>/` directory poll the repository and
+   install nothing until their directory appears — nothing installs by
+   accident.
 
 Bootstrap order for a new cluster: the `10-server-init` node first; once
 the VIP answers, the remaining nodes in any order.

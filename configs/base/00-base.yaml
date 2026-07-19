@@ -14,7 +14,11 @@ users:
 install:
   # Node fragments set the concrete target device.
   auto: true
-  reboot: true
+  # Power off instead of rebooting: on headless machines the powered-down
+  # state is the "installation finished" signal, and it prevents an
+  # accidental reinstall when the boot medium is still attached.
+  reboot: false
+  poweroff: true
 
 # Keep the immutable design honest: no interactive changes on the host.
 stages:
