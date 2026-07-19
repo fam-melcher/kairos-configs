@@ -2,8 +2,8 @@
 #
 # dispatch.sh — select and fetch this node's configuration during live boot.
 #
-# Shipped in the installer ISO overlay together with dispatch.env, static
-# sops and curl binaries and the cluster age key (ADR 0008). Derives the
+# Shipped in the installer ISO overlay together with dispatch.env, a
+# static sops binary and the cluster age key (ADR 0008). Derives the
 # node ID from the machine's product UUID (ADR 0007), downloads the
 # fragments listed in the node's fragments.list into /oem and injects the
 # decrypted K3s token. The Kairos auto-installer then proceeds with the
@@ -21,15 +21,14 @@ fail() {
     exit 1
 }
 
-# Minimal live systems (hadron) may not ship curl; fall back to the bundled
-# static binary.
-curl_bin="curl"
-command -v curl > /dev/null 2>&1 || curl_bin="${script_dir}/curl"
+# hadron ships curl in the live system (verified against the image
+# contents); only sops is bundled in the overlay.
+command -v curl > /dev/null 2>&1 || fail "curl not found in live system"
 
 # probe <url> <output-file> — single silent attempt, used while polling for
 # a configuration that may not exist yet (a 404 is expected, not an error).
 probe() {
-    "${curl_bin}" -fsSL "${1}" -o "${2}" 2> /dev/null
+    curl -fsSL "${1}" -o "${2}" 2> /dev/null
 }
 
 # Full-screen status shown while waiting for the node's configuration to
@@ -64,7 +63,7 @@ fetch() {
     _attempt=1
 
     while [ "${_attempt}" -le 3 ]; do
-        if "${curl_bin}" -fsSL "${1}" -o "${2}"; then
+        if curl -fsSL "${1}" -o "${2}"; then
             return 0
         fi
         echo "dispatch: fetch attempt ${_attempt}/3 failed: ${1}" >&2
@@ -86,7 +85,7 @@ fetch() {
 uuid="$(cat "${uuid_file}")"
 node_id="node-$(echo "${uuid}" | cut -d- -f1 | tr '[:upper:]' '[:lower:]')"
 echo "dispatch: node id is ${node_id}"
-echo "dispatch: using $(${curl_bin} --version | head -1)"
+echo "dispatch: using $(curl --version | head -1)"
 
 # Advertise our identity where a headless operator already looks: name the
 # live system setup-<id> and renew the DHCP lease so the switch/router UI

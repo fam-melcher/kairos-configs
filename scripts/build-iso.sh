@@ -11,8 +11,11 @@
 # Produces build/iso/kairos-<version>-<arch>-<distro>-<env>.iso containing:
 #   - iso/bootstrap.yaml as the baked cloud-config
 #   - a rootfs overlay with the dispatch trigger (/system/oem)
-#   - an ISO overlay with dispatch.sh, dispatch.env, static sops and curl
-#     binaries and the environment's cluster age key
+#   - an ISO overlay with dispatch.sh, dispatch.env, a static sops binary
+#     and the environment's cluster age key
+#
+# Only tools missing from the hadron image are bundled (verified against
+# the image contents): curl ships with hadron, sops does not.
 #
 # WARNING: the resulting ISO embeds the private cluster age key of its
 # environment. Treat the image as secret material (ADR 0008).
@@ -30,8 +33,9 @@
 #   KAIROS_IMAGE      full image override (skips construction from the above)
 #   AURORABOOT_IMAGE  AuroraBoot builder image
 #   AGE_KEY_FILE      cluster age key (default: .keys/homelab-<env>-cluster.agekey)
-#   SOPS_VERSION      static sops release bundled into the ISO
-#   CURL_VERSION      static curl release bundled into the ISO
+#   SOPS_VERSION      sops release to bundle (default: latest — resolved at
+#                     build time so fixes arrive automatically; pin for
+#                     reproducible builds)
 
 set -euo pipefail
 
@@ -70,7 +74,7 @@ HADRON_VERSION="${HADRON_VERSION:-v0.4.0}"
 KAIROS_IMAGE="${KAIROS_IMAGE:-quay.io/kairos/hadron:${HADRON_VERSION}-standard-${ARCH}-generic-v${KAIROS_VERSION}-${K8S_DISTRO}-${K8S_VERSION}}"
 AURORABOOT_IMAGE="${AURORABOOT_IMAGE:-quay.io/kairos/auroraboot:v0.25.2}"
 AGE_KEY_FILE="${AGE_KEY_FILE:-${repo_root}/.keys/homelab-${env}-cluster.agekey}"
-SOPS_VERSION="${SOPS_VERSION:-v3.13.2}"
+SOPS_VERSION="${SOPS_VERSION:-latest}"
 
 iso_name="kairos-${KAIROS_VERSION}-${ARCH}-${K8S_DISTRO}-${env}.iso"
 config_repo_url="https://raw.githubusercontent.com/fam-melcher/kairos-configs"
@@ -108,6 +112,13 @@ mkdir -p "${overlay_dir}"
 
 # --- Static sops binary (cached in build/, checksum-verified) -----------------
 
+if [[ "${SOPS_VERSION}" == "latest" ]]; then
+    SOPS_VERSION="$(curl -fsSL https://api.github.com/repos/getsops/sops/releases/latest \
+        | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p')"
+    [[ -n "${SOPS_VERSION}" ]] || fail "could not resolve latest sops release"
+fi
+echo "build-iso: bundling sops ${SOPS_VERSION}"
+
 # The dispatcher and its binaries run inside the target's live system, not
 # on the build host — the bundled binaries must match ARCH, not the host.
 sops_asset="sops-${SOPS_VERSION}.linux.${ARCH}"
@@ -125,39 +136,10 @@ expected="$(echo "${checksums}" | grep " ${sops_asset}\$" | awk '{print $1}')"
 actual="$(shasum -a 256 "${build_dir}/${sops_asset}" | awk '{print $1}')"
 [[ "${actual}" == "${expected}" ]] || fail "checksum mismatch for ${sops_asset}"
 
-# --- Static curl binary (checksum-pinned) -------------------------------------
-# Hadron live systems are minimal and may not ship curl; the dispatcher falls
-# back to this bundled musl-static build (https://github.com/stunnel/static-curl).
-
-CURL_VERSION="${CURL_VERSION:-8.21.0}"
-case "${ARCH}" in
-    amd64)
-        curl_arch="x86_64"
-        curl_sha256="e955f211202ded2536164588331acfc987dc4b7857efa3577717b1ffeab22029"
-        ;;
-    arm64)
-        curl_arch="aarch64"
-        curl_sha256="d3f10502a9c6ead9bc3763fde3d12467db03661a263e11fec2ef2edc70e98e9f"
-        ;;
-esac
-curl_asset="curl-linux-${curl_arch}-musl-${CURL_VERSION}.tar.xz"
-curl_url="https://github.com/stunnel/static-curl/releases/download/${CURL_VERSION}/${curl_asset}"
-
-if [[ ! -f "${build_dir}/${curl_asset}" ]]; then
-    echo "build-iso: downloading ${curl_asset}"
-    curl -fsSL "${curl_url}" -o "${build_dir}/${curl_asset}"
-fi
-
-actual="$(shasum -a 256 "${build_dir}/${curl_asset}" | awk '{print $1}')"
-[[ "${actual}" == "${curl_sha256}" ]] || fail "checksum mismatch for ${curl_asset}"
-
-tar -xJf "${build_dir}/${curl_asset}" -C "${build_dir}" curl
-
 # --- Assemble overlays and cloud-config ---------------------------------------
 
 install -m 0755 "${repo_root}/iso/dispatch.sh" "${overlay_dir}/dispatch.sh"
 install -m 0755 "${build_dir}/${sops_asset}" "${overlay_dir}/sops"
-install -m 0755 "${build_dir}/curl" "${overlay_dir}/curl"
 install -m 0600 "${AGE_KEY_FILE}" "${overlay_dir}/cluster.agekey"
 
 cat > "${overlay_dir}/dispatch.env" <<EOF
