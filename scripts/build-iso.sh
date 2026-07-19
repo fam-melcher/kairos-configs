@@ -134,7 +134,7 @@ mkdir -p "${build_dir}/iso"
 "${engine}" run --rm \
     -v "${state_volume}:/state:ro" \
     -v "${build_dir}/iso:/out" \
-    busybox sh -c 'cp /state/iso/*.iso /out/'
+    busybox sh -c 'cp /state/*.iso /state/*.iso.sha256 /out/'
 "${engine}" volume rm -f "${state_volume}" > /dev/null
 
 echo
