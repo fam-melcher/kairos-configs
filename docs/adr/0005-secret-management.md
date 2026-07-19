@@ -41,8 +41,9 @@ Two-stage strategy:
     cannot be committed by accident.
   - `.sops.yaml` at the repository root defines creation rules; it ships
     with commented-out rules until the first age key is generated.
-  - Private age keys live outside the repository (per-engineer, e.g.
-    `~/.config/sops/age/keys.txt`); only public keys appear in `.sops.yaml`.
+  - Private age keys live in the repo-local `.keys/` directory — part of
+    the working tree but hard-excluded from git, so keys stay scoped to
+    this project; only public keys appear in `.sops.yaml`.
 - **Runtime secrets: Vault or external-secrets operator (option 4), later.**
   - Introduced once the cluster runs; will get its own ADR.
   - Nothing in the current layout depends on its absence.
