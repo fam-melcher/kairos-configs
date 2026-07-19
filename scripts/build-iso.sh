@@ -123,6 +123,7 @@ echo "build-iso: config branch=${branch}"
     -v "${build_dir}:/input:ro" \
     "${AURORABOOT_IMAGE}" \
     --set "container_image=${KAIROS_IMAGE}" \
+    --set "arch=${ARCH}" \
     --set "disable_http_server=true" \
     --set "disable_netboot=true" \
     --set "state_dir=/state" \
