@@ -96,10 +96,39 @@ expected="$(echo "${checksums}" | grep " ${sops_asset}\$" | awk '{print $1}')"
 actual="$(shasum -a 256 "${build_dir}/${sops_asset}" | awk '{print $1}')"
 [[ "${actual}" == "${expected}" ]] || fail "checksum mismatch for ${sops_asset}"
 
+# --- Static curl binary (checksum-pinned) -------------------------------------
+# Hadron live systems are minimal and may not ship curl; the dispatcher falls
+# back to this bundled musl-static build (https://github.com/stunnel/static-curl).
+
+CURL_VERSION="${CURL_VERSION:-8.21.0}"
+case "${ARCH}" in
+    amd64)
+        curl_arch="x86_64"
+        curl_sha256="e955f211202ded2536164588331acfc987dc4b7857efa3577717b1ffeab22029"
+        ;;
+    arm64)
+        curl_arch="aarch64"
+        curl_sha256="d3f10502a9c6ead9bc3763fde3d12467db03661a263e11fec2ef2edc70e98e9f"
+        ;;
+esac
+curl_asset="curl-linux-${curl_arch}-musl-${CURL_VERSION}.tar.xz"
+curl_url="https://github.com/stunnel/static-curl/releases/download/${CURL_VERSION}/${curl_asset}"
+
+if [[ ! -f "${build_dir}/${curl_asset}" ]]; then
+    echo "build-iso: downloading ${curl_asset}"
+    curl -fsSL "${curl_url}" -o "${build_dir}/${curl_asset}"
+fi
+
+actual="$(shasum -a 256 "${build_dir}/${curl_asset}" | awk '{print $1}')"
+[[ "${actual}" == "${curl_sha256}" ]] || fail "checksum mismatch for ${curl_asset}"
+
+tar -xJf "${build_dir}/${curl_asset}" -C "${build_dir}" curl
+
 # --- Assemble overlay and cloud-config ---------------------------------------
 
 install -m 0755 "${repo_root}/iso/dispatch.sh" "${overlay_dir}/dispatch.sh"
 install -m 0755 "${build_dir}/${sops_asset}" "${overlay_dir}/sops"
+install -m 0755 "${build_dir}/curl" "${overlay_dir}/curl"
 install -m 0600 "${AGE_KEY_FILE}" "${overlay_dir}/cluster.agekey"
 
 cat > "${overlay_dir}/dispatch.env" <<EOF

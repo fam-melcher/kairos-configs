@@ -37,10 +37,17 @@ plaintext or baked into a widely shared image?
 
 Generic ISO with self-dispatch (option 4):
 
-- `iso/bootstrap.yaml` — baked cloud-config; runs the dispatcher in the
-  `network` stage, then auto-install proceeds.
+- `iso/bootstrap.yaml` — baked cloud-config; provides SSH access to the
+  live system (debugging) and runs the dispatcher in the `network` stage.
+  It contains no `install:` block: installation is gated on dispatch
+  success, because `install.auto` only enters the merged configuration
+  through the fetched base fragment in `/oem` (which the agent scans last
+  and therefore with the highest precedence, also in live mode).
 - `iso/dispatch.sh` — POSIX-shell dispatcher; fails loudly and leaves the
-  machine uninstalled if no `nodes/<id>/` exists.
+  machine in the live system if no `nodes/<id>/` exists or any fetch step
+  fails. Logs to the console and `/tmp/dispatch.log`. Uses the system curl
+  when present, otherwise the bundled static build (hadron live systems
+  are minimal).
 - `nodes/<id>/fragments.list` — explicit, ordered fragment list per node.
   This also encodes the node's role (init vs. join) without dispatcher
   heuristics.
@@ -48,9 +55,10 @@ Generic ISO with self-dispatch (option 4):
   decrypts it with a **dedicated cluster age key** shipped in the ISO
   overlay (never an engineer's personal key), and stages the token as
   `/oem/30-k3s-token.yaml`.
-- `scripts/build-iso.sh` assembles the overlay (dispatcher, static sops
-  binary — checksum-verified, cluster age key, config URL pinned to a
-  branch) and builds via AuroraBoot in Docker. Pinned versions throughout.
+- `scripts/build-iso.sh` assembles the overlay (dispatcher, static sops and
+  curl binaries — checksum-verified, cluster age key, config URL pinned to
+  a branch) and builds via AuroraBoot in a container engine (docker,
+  podman, or nerdctl — auto-detected). Pinned versions throughout.
 
 ## Consequences
 
