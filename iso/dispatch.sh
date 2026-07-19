@@ -75,7 +75,8 @@ fetch "${CONFIG_BASE_URL}/secrets/k3s-token.sops.yaml" "${token_file}" \
     || fail "failed to fetch k3s token secret"
 
 token="$(SOPS_AGE_KEY_FILE="${script_dir}/cluster.agekey" \
-    "${script_dir}/sops" -d --extract '["k3s_token"]' "${token_file}")" \
+    "${script_dir}/sops" -d --input-type yaml --output-type yaml \
+    --extract '["k3s_token"]' "${token_file}")" \
     || fail "failed to decrypt k3s token"
 rm -f "${token_file}"
 
