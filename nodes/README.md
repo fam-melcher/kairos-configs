@@ -18,12 +18,25 @@ Each directory contains:
 
 ## Adding a node
 
-1. Read the machine's product UUID and derive the node ID (command above).
-2. `mkdir nodes/<node-id>`
-3. Copy `templates/20-node.yaml.tmpl` to `nodes/<node-id>/20-<node-id>.yaml`
-   and replace every `@VARIABLE@` placeholder (grep for `@` must come back
-   empty).
-4. Copy `templates/fragments.list.tmpl` to `nodes/<node-id>/fragments.list`
-   and replace `@NODE_ID@`.
-5. Open a pull request. After merge, boot the machine from the generic
-   installer ISO — it selects this configuration by itself.
+1. Read the machine's product UUID (command above, or Hyper-V:
+   `Get-CimInstance -Namespace root\virtualization\v2
+   Msvm_VirtualSystemSettingData | Select ElementName, BIOSGUID`).
+2. `scripts/add-node.sh <uuid> [join|init] [install-device]` — scaffolds
+   the node directory from the templates.
+3. Review the generated files (network section), commit, push.
+4. Boot the machine from the generic installer ISO — it selects this
+   configuration by itself.
+
+## Unknown UUID
+
+Just boot the machine from the installer ISO. The dispatcher prints the
+derived node ID on the console and polls the repository every 60 seconds:
+
+```text
+dispatch: no configuration for node-xxxxxxxx
+dispatch: create nodes/node-xxxxxxxx/ in the repository — retrying in 60s
+```
+
+Run `scripts/add-node.sh node-xxxxxxxx`, commit, push — the machine picks
+up its configuration on the next poll and installs without another boot.
+Machines without a repository entry never install anything.
