@@ -39,7 +39,9 @@ case "${ARCH}" in
     *) fail "unsupported ARCH '${ARCH}' (amd64 or arm64)" ;;
 esac
 
-KAIROS_IMAGE="${KAIROS_IMAGE:-quay.io/kairos/ubuntu:24.04-standard-${ARCH}-generic-v3.7.2-k3s-v1.34.3-k3s3}"
+# Kairos v4 publishes prebuilt images as the "hadron" flavor; the ubuntu
+# flavor repositories are no longer updated by the release pipeline.
+KAIROS_IMAGE="${KAIROS_IMAGE:-quay.io/kairos/hadron:v0.4.0-standard-${ARCH}-generic-v4.1.2-k3s-v1.35.5-k3s1}"
 AURORABOOT_IMAGE="${AURORABOOT_IMAGE:-quay.io/kairos/auroraboot:v0.25.2}"
 AGE_KEY_FILE="${AGE_KEY_FILE:-${HOME}/.config/sops/age/homelab-dev-cluster.txt}"
 SOPS_VERSION="${SOPS_VERSION:-v3.13.2}"
