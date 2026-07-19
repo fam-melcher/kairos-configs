@@ -36,15 +36,25 @@ esac
 [[ "${device}" == /dev/* ]] || device="/dev/${device}"
 [[ "${device}" =~ ^/dev/[a-zA-Z0-9_/-]+$ ]] || fail "invalid install device '${device}'"
 
-# Normalize: strip a node- prefix, take the first dash-separated segment,
-# lowercase — the same derivation the dispatcher uses (ADR 0007).
-id="${raw#node-}"
-id="${id%%-*}"
-id="$(echo "${id}" | tr '[:upper:]' '[:lower:]')"
+# Accept either a full product UUID (hashed like the dispatcher does,
+# ADR 0010) or a ready-made node-<8hex> id as shown on the status screen.
+sha256() {
+    if command -v sha256sum > /dev/null 2>&1; then
+        sha256sum
+    else
+        shasum -a 256
+    fi
+}
 
-[[ "${id}" =~ ^[0-9a-f]{8}$ ]] || fail "'${raw}' does not yield an 8-hex node id (got '${id}')"
+normalized="$(echo "${raw}" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')"
 
-node_id="node-${id}"
+if [[ "${normalized}" =~ ^node-[0-9a-f]{8}$ ]]; then
+    node_id="${normalized}"
+elif [[ "${normalized}" =~ ^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$ ]]; then
+    node_id="node-$(printf '%s' "${normalized}" | sha256 | cut -c1-8)"
+else
+    fail "'${raw}' is neither a full product UUID nor a node-<8hex> id"
+fi
 node_dir="${repo_root}/nodes/${node_id}"
 
 [[ ! -e "${node_dir}" ]] || fail "${node_dir} already exists"

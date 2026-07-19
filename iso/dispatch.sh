@@ -82,8 +82,11 @@ fetch() {
 
 [ -n "${CONFIG_BASE_URL:-}" ] || fail "CONFIG_BASE_URL not set in dispatch.env"
 
-uuid="$(cat "${uuid_file}")"
-node_id="node-$(echo "${uuid}" | cut -d- -f1 | tr '[:upper:]' '[:lower:]')"
+# Node ID = first 8 hex of sha256 over the lowercased product UUID
+# (ADR 0010). Hashing the full UUID instead of taking its first segment
+# avoids vendor-constant prefixes (Dell encodes "DELL" as 4c4c4544-…).
+uuid="$(tr -d '[:space:]' < "${uuid_file}" | tr '[:upper:]' '[:lower:]')"
+node_id="node-$(printf '%s' "${uuid}" | sha256sum | cut -c1-8)"
 echo "dispatch: node id is ${node_id}"
 echo "dispatch: using $(curl --version | head -1)"
 
