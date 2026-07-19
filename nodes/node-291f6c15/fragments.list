@@ -1,4 +1,0 @@
-configs/base/00-base.yaml
-configs/roles/10-server-init.yaml
-configs/roles/15-kube-vip.yaml
-nodes/node-291f6c15/20-node-291f6c15.yaml

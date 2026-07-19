@@ -1,8 +1,0 @@
-#cloud-config
-# Node fragment for node-5eb586f2 (dev VM cluster, joining server).
-# Node ID = first segment of /sys/class/dmi/id/product_uuid (ADR 0007).
-
-hostname: "node-5eb586f2"
-
-install:
-  device: "/dev/sda"
