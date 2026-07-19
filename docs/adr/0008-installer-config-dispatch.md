@@ -52,11 +52,15 @@ Generic ISO with self-dispatch (option 4):
   the installer service's start order instead would be a race: it snapshots
   the merged configuration when it starts, which can happen before staging
   finishes.
-- `iso/dispatch.sh` — POSIX-shell dispatcher; fails loudly and leaves the
-  machine in the live system if no `nodes/<id>/` exists or any fetch step
-  fails. Logs to the console and `/tmp/dispatch.log`. Uses the system curl
-  when present, otherwise the bundled static build (hadron live systems
-  are minimal).
+- `iso/dispatch.sh` — POSIX-shell dispatcher. A machine without a
+  `nodes/<id>/` directory is not an error: the dispatcher prints the
+  derived node ID on the console and polls the repository every 60 seconds,
+  so an operator can commit the directory (`scripts/add-node.sh`) and the
+  installation continues without another boot. Failures after the node is
+  known (missing fragments, token errors) abort loudly and leave the
+  machine in the live system. Logs to the console and `/tmp/dispatch.log`.
+  Uses the system curl when present, otherwise the bundled static build
+  (hadron live systems are minimal).
 - `nodes/<id>/fragments.list` — explicit, ordered fragment list per node.
   This also encodes the node's role (init vs. join) without dispatcher
   heuristics.

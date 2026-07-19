@@ -54,9 +54,17 @@ node_id="node-$(cut -d- -f1 "${uuid_file}" | tr '[:upper:]' '[:lower:]')"
 echo "dispatch: node id is ${node_id}"
 echo "dispatch: using $(${curl_bin} --version | head -1)"
 
+# An unknown machine is not an error: keep polling so an operator can read
+# the node id from the console, commit nodes/<id>/ to the repository
+# (scripts/add-node.sh), and have the installation continue on the next
+# poll — without another boot.
 list_file="$(mktemp)"
-fetch "${CONFIG_BASE_URL}/nodes/${node_id}/fragments.list" "${list_file}" \
-    || fail "no configuration for ${node_id}"
+list_url="${CONFIG_BASE_URL}/nodes/${node_id}/fragments.list"
+until fetch "${list_url}" "${list_file}"; do
+    echo "dispatch: no configuration for ${node_id}"
+    echo "dispatch: create nodes/${node_id}/ in the repository — retrying in 60s"
+    sleep 60
+done
 
 mkdir -p "${oem_dir}"
 
