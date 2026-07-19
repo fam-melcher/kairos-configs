@@ -27,6 +27,10 @@ A node's configuration is the ordered set of its three fragments
 
 ## Usage
 
+First-time setup (workstation, keys, first cluster):
+[docs/initial-setup.md](docs/initial-setup.md). Key and secret rotation:
+[docs/key-rotation.md](docs/key-rotation.md).
+
 Recreate or repair the repository skeleton (idempotent, never overwrites):
 
 ```sh
