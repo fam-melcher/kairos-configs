@@ -32,6 +32,10 @@ case "${role}" in
     *) fail "role must be 'join' or 'init', got '${role}'" ;;
 esac
 
+# Normalize the install device: accept bare names like "sda" or "nvme0n1".
+[[ "${device}" == /dev/* ]] || device="/dev/${device}"
+[[ "${device}" =~ ^/dev/[a-zA-Z0-9_/-]+$ ]] || fail "invalid install device '${device}'"
+
 # Normalize: strip a node- prefix, take the first dash-separated segment,
 # lowercase — the same derivation the dispatcher uses (ADR 0007).
 id="${raw#node-}"
