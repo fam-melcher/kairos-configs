@@ -40,9 +40,11 @@ Generic ISO with self-dispatch (option 4):
 - `iso/bootstrap.yaml` — baked cloud-config; provides SSH access to the
   live system (debugging) and runs the dispatcher in the `network` stage.
   It contains no `install:` block: installation is gated on dispatch
-  success, because `install.auto` only enters the merged configuration
-  through the fetched base fragment in `/oem` (which the agent scans last
-  and therefore with the highest precedence, also in live mode).
+  success — the dispatcher itself starts `kairos-agent install` after
+  staging `/oem` (which the agent scans last and therefore with the
+  highest precedence, also in live mode). Relying on the installer
+  service's start order instead would be a race: it snapshots the merged
+  configuration when it starts, which can happen before staging finishes.
 - `iso/dispatch.sh` — POSIX-shell dispatcher; fails loudly and leaves the
   machine in the live system if no `nodes/<id>/` exists or any fetch step
   fails. Logs to the console and `/tmp/dispatch.log`. Uses the system curl

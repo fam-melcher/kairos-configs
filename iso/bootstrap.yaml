@@ -3,9 +3,9 @@
 #
 # This is not a node configuration. It provides SSH access to the live
 # system (debugging) and runs the dispatcher once the network is up.
-# Installation is deliberately gated on dispatch success: install.auto
-# comes from the fetched base fragment in /oem, so a machine whose
-# dispatch fails stays in the live system and never half-installs.
+# Installation is deliberately gated on dispatch success: the dispatcher
+# itself starts `kairos-agent install` after staging /oem, so a machine
+# whose dispatch fails stays in the live system and never half-installs.
 
 users:
   - name: kairos

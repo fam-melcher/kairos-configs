@@ -88,3 +88,10 @@ k3s:
 EOF
 
 echo "dispatch: configuration for ${node_id} staged in ${oem_dir}"
+
+# Trigger the installation ourselves instead of relying on the installer
+# service having started after the staging above (its config snapshot is
+# taken at service start — a race we lose on fast boots). kairos-agent
+# re-scans all config sources including /oem at this point.
+echo "dispatch: starting installation"
+exec kairos-agent install
