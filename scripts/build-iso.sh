@@ -29,7 +29,7 @@
 #   HADRON_VERSION    hadron flavor release
 #   KAIROS_IMAGE      full image override (skips construction from the above)
 #   AURORABOOT_IMAGE  AuroraBoot builder image
-#   AGE_KEY_FILE      cluster age key (default: ~/.config/sops/age/homelab-<env>-cluster.txt)
+#   AGE_KEY_FILE      cluster age key (default: .keys/homelab-<env>-cluster.agekey)
 #   SOPS_VERSION      static sops release bundled into the ISO
 #   CURL_VERSION      static curl release bundled into the ISO
 
@@ -69,7 +69,7 @@ HADRON_VERSION="${HADRON_VERSION:-v0.4.0}"
 # flavor repositories are no longer updated by the release pipeline.
 KAIROS_IMAGE="${KAIROS_IMAGE:-quay.io/kairos/hadron:${HADRON_VERSION}-standard-${ARCH}-generic-v${KAIROS_VERSION}-${K8S_DISTRO}-${K8S_VERSION}}"
 AURORABOOT_IMAGE="${AURORABOOT_IMAGE:-quay.io/kairos/auroraboot:v0.25.2}"
-AGE_KEY_FILE="${AGE_KEY_FILE:-${HOME}/.config/sops/age/homelab-${env}-cluster.txt}"
+AGE_KEY_FILE="${AGE_KEY_FILE:-${repo_root}/.keys/homelab-${env}-cluster.agekey}"
 SOPS_VERSION="${SOPS_VERSION:-v3.13.2}"
 
 iso_name="kairos-${KAIROS_VERSION}-${ARCH}-${K8S_DISTRO}-${env}.iso"
