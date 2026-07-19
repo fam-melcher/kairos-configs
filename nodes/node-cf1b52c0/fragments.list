@@ -1,0 +1,6 @@
+configs/base/00-base.yaml
+configs/roles/10-server-join.yaml
+configs/env/12-cluster.yaml
+configs/env/13-join.yaml
+configs/env/15-kube-vip.yaml
+nodes/node-cf1b52c0/20-node-cf1b52c0.yaml
