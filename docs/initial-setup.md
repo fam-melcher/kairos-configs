@@ -11,28 +11,67 @@ the key backup. Covers a fresh workstation and a fresh cluster.
   (`scripts/build-iso.sh` auto-detects)
 - `dig` and `ssh` for headless provisioning
 
-## 2. Clone and restore keys
+## 2. Clone and set up keys
 
 ```sh
 git clone git@github.com:fam-melcher/kairos-configs.git
 cd kairos-configs
 mkdir -p .keys && chmod 700 .keys
+export SOPS_AGE_KEY_FILE="$PWD/.keys/engineer.agekey"
 ```
+
+`.keys/` is hard-gitignored; nothing in it is ever committed. Two
+starting points:
+
+### 2a. Existing setup — restore from backup
 
 Restore the private age keys from the backup (password manager) into
-`.keys/` — see `secrets/README.md` for the expected files. `.keys/` is
-hard-gitignored; nothing in it is ever committed.
-
-If no backup exists, the keys are gone: generate new ones and follow
-[key-rotation.md](key-rotation.md) (scenario "all keys lost") before
-anything else.
-
-Verify:
+`.keys/` — see `secrets/README.md` for the expected files. Verify:
 
 ```sh
-export SOPS_AGE_KEY_FILE="$PWD/.keys/engineer.agekey"
 sops -d secrets/k3s-token.sops.yaml   # must print the token
 ```
+
+Continue with step 3.
+
+(No backup, but the cluster still runs? That is a rotation, not a setup:
+[key-rotation.md](key-rotation.md), scenario "all keys lost".)
+
+### 2b. From zero — no keys, no cluster
+
+Generate the full key set (engineer key plus one cluster key per
+environment you will use):
+
+```sh
+age-keygen -o .keys/engineer.agekey
+age-keygen -o .keys/homelab-prod-cluster.agekey
+age-keygen -o .keys/homelab-dev-cluster.agekey     # if using the dev env
+chmod 600 .keys/*.agekey
+```
+
+**Back the keys up now** (password manager) — they exist nowhere else,
+and a lost engineer key means every secret becomes unreadable.
+
+Then, on each environment branch (`main` via pull request,
+`dev-vm-cluster` directly):
+
+1. Put the new **public** keys (printed by `age-keygen`, or
+   `age-keygen -y <file>`) into `.sops.yaml`: engineer key plus that
+   environment's cluster key — never the other environment's.
+2. Any pre-existing files in `secrets/` were encrypted for previous keys
+   and are unreadable now — recreate them. Currently that is the K3s
+   cluster token:
+
+   ```sh
+   printf 'k3s_token: %s\n' "$(openssl rand -hex 32)" > secrets/k3s-token.sops.yaml
+   sops -e -i secrets/k3s-token.sops.yaml
+   sops -d secrets/k3s-token.sops.yaml >/dev/null && echo ok
+   ```
+
+3. Commit `.sops.yaml` and `secrets/` together.
+
+Cross-check before building anything: the dev cluster key must fail to
+decrypt prod secrets, and vice versa.
 
 ## 3. Build the installer ISO
 
