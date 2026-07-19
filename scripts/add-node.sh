@@ -51,9 +51,16 @@ sed -e "s|@NODE_HOSTNAME@|${node_id}|g" \
     -e "s|@NODE_INSTALL_DEVICE@|${device}|g" \
     "${repo_root}/templates/20-node.yaml.tmpl" > "${node_dir}/20-${node_id}.yaml"
 
-sed -e "s|@NODE_ID@|${node_id}|g" \
-    -e "s|10-server-join|10-server-${role}|g" \
-    "${repo_root}/templates/fragments.list.tmpl" > "${node_dir}/fragments.list"
+# init nodes must not carry the join target fragment (configs/env/13-join.yaml).
+if [[ "${role}" == "init" ]]; then
+    sed -e "s|@NODE_ID@|${node_id}|g" \
+        -e "s|10-server-join|10-server-init|g" \
+        -e "\|configs/env/13-join.yaml|d" \
+        "${repo_root}/templates/fragments.list.tmpl" > "${node_dir}/fragments.list"
+else
+    sed -e "s|@NODE_ID@|${node_id}|g" \
+        "${repo_root}/templates/fragments.list.tmpl" > "${node_dir}/fragments.list"
+fi
 
 echo "add-node: created ${node_dir} (role: ${role}, device: ${device})"
 echo "add-node: review the network section in 20-${node_id}.yaml, then commit and push."

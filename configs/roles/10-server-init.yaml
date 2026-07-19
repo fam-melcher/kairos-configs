@@ -1,8 +1,9 @@
 #cloud-config
 # Role fragment: first K3s server — initialises the embedded etcd cluster.
 # Used by exactly one node per cluster (ADR 0006); all other servers use
-# 10-server-join.yaml. The cluster token is injected at dispatch time as
-# /oem/30-k3s-token.yaml (ADR 0008) and never lives in this file.
+# 10-server-join.yaml. Environment-specific values (VIP, join target) live
+# in configs/env/ (ADR 0009); the cluster token is injected at dispatch
+# time as /oem/30-k3s-token.yaml (ADR 0008).
 
 k3s:
   enabled: true
@@ -10,4 +11,3 @@ k3s:
     - --cluster-init
     - --disable=traefik
     - --disable=servicelb
-    - --tls-san=192.168.1.11
