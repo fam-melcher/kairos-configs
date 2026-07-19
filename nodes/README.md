@@ -29,8 +29,12 @@ Each directory contains:
 
 ## Unknown UUID
 
-Just boot the machine from the installer ISO. The dispatcher prints the
-derived node ID on the console and polls the repository every 60 seconds:
+Just boot the machine from the installer ISO. The live system announces
+itself via DHCP as `setup-<id>` (visible in the switch/router UI; installed
+nodes use `node-<id>`, so waiting machines are easy to tell apart — and a
+disappearing `setup-` entry means the installation finished and the machine
+powered off). The console shows a status screen and the dispatcher polls
+the repository every 60 seconds:
 
 ```text
 dispatch: no configuration for node-xxxxxxxx

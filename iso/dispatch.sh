@@ -88,6 +88,15 @@ node_id="node-$(echo "${uuid}" | cut -d- -f1 | tr '[:upper:]' '[:lower:]')"
 echo "dispatch: node id is ${node_id}"
 echo "dispatch: using $(${curl_bin} --version | head -1)"
 
+# Advertise our identity where a headless operator already looks: name the
+# live system setup-<id> and renew the DHCP lease so the switch/router UI
+# shows which machine is waiting. Installed systems use node-<id>, so the
+# setup- prefix unambiguously marks unprovisioned live boots.
+setup_name="setup-${node_id#node-}"
+hostnamectl set-hostname "${setup_name}" 2> /dev/null || hostname "${setup_name}" || true
+_iface="$(ip -4 route get 1.1.1.1 2> /dev/null | sed -n 's/.* dev \([^ ]*\).*/\1/p')"
+[ -z "${_iface}" ] || networkctl renew "${_iface}" 2> /dev/null || true
+
 # An unknown machine is not an error: keep polling so an operator can read
 # the node id from the status screen, commit nodes/<id>/ to the repository
 # (scripts/add-node.sh), and have the installation continue on the next
