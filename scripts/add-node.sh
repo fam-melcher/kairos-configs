@@ -36,8 +36,10 @@ esac
 [[ "${device}" == /dev/* ]] || device="/dev/${device}"
 [[ "${device}" =~ ^/dev/[a-zA-Z0-9_/-]+$ ]] || fail "invalid install device '${device}'"
 
-# Accept either a full product UUID (hashed like the dispatcher does,
-# ADR 0010) or a ready-made node-<8hex> id as shown on the status screen.
+# Accept a full product UUID (hashed like the dispatcher does, ADR 0010)
+# or a ready-made id in any form an operator encounters it: node-<8hex>,
+# setup-<8hex> (DHCP name of a waiting installer), or the bare 8 hex
+# characters. Since the hash scheme, a bare 8-hex string is unambiguous.
 sha256() {
     if command -v sha256sum > /dev/null 2>&1; then
         sha256sum
@@ -47,13 +49,15 @@ sha256() {
 }
 
 normalized="$(echo "${raw}" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')"
+normalized="${normalized#node-}"
+normalized="${normalized#setup-}"
 
-if [[ "${normalized}" =~ ^node-[0-9a-f]{8}$ ]]; then
-    node_id="${normalized}"
+if [[ "${normalized}" =~ ^[0-9a-f]{8}$ ]]; then
+    node_id="node-${normalized}"
 elif [[ "${normalized}" =~ ^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$ ]]; then
     node_id="node-$(printf '%s' "${normalized}" | sha256 | cut -c1-8)"
 else
-    fail "'${raw}' is neither a full product UUID nor a node-<8hex> id"
+    fail "'${raw}' is neither a full product UUID nor an 8-hex node id"
 fi
 node_dir="${repo_root}/nodes/${node_id}"
 
