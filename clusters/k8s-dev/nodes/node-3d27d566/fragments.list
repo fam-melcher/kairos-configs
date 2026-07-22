@@ -1,4 +1,5 @@
 configs/base/00-base.yaml
 clusters/k8s-dev/config/11-cluster.yaml
+configs/cluster/12-tls-san.yaml
 configs/cluster/15-kube-vip.yaml
 clusters/k8s-dev/nodes/node-3d27d566/20-node-3d27d566.yaml

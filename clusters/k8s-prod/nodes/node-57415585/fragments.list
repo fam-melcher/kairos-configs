@@ -1,5 +1,6 @@
 configs/base/00-base.yaml
 clusters/k8s-prod/config/11-cluster.yaml
+configs/cluster/12-tls-san.yaml
 clusters/k8s-prod/config/14-net-mtu.yaml
 configs/cluster/15-kube-vip.yaml
 clusters/k8s-prod/nodes/node-57415585/20-node-57415585.yaml

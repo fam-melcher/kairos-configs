@@ -11,11 +11,13 @@ clusters/<name>/
 └── secrets/         # SOPS-encrypted material only (per-cluster age recipients)
 ```
 
-**Single source of values (ADR 0013):** a cluster's VIP and DNS name live
-exactly once, in `config/11-cluster.yaml`. Everything that needs them
-(tls-san drop-in, join target, kube-vip manifest) renders on the node
-from `/etc/kairos-cluster/cluster.env`; the shared renderers live in
-`configs/cluster/`. Changing a VIP is a one-line edit.
+**Single source of values (ADR 0013):** a cluster's values live exactly
+once, in `config/11-cluster.yaml` — a pure data file (`values: {vip, dns,
+…}`). The installer's dispatcher converts the scalars generically to
+`/etc/kairos-cluster/cluster.env` on the node; everything that needs them
+(tls-san drop-in, join target, kube-vip manifest) renders from there via
+the shared renderers in `configs/cluster/`. Changing a VIP is a one-line
+edit.
 
 Create a new cluster with `scripts/add-cluster.sh <dns-name> <vip>` — it
 scaffolds the directories, renders the config fragments from

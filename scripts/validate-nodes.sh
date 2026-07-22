@@ -83,11 +83,16 @@ for cluster_dir in "${repo_root}"/clusters/*/; do
         continue
     fi
 
-    dns_name="$(sed -n 's/^ *CLUSTER_DNS=\([a-z0-9.-][a-z0-9.-]*\)$/\1/p' "${cluster_yaml}" | head -1)"
+    vip="$(sed -n 's/^  vip: *"\{0,1\}\([0-9.][0-9.]*\)"\{0,1\}$/\1/p' "${cluster_yaml}" | head -1)"
+    if [[ -z "${vip}" ]]; then
+        violation "clusters/${cluster}: no vip value in config/11-cluster.yaml"
+    fi
+
+    dns_name="$(sed -n 's/^  dns: *"\{0,1\}\([a-z0-9.-][a-z0-9.-]*\)"\{0,1\}$/\1/p' "${cluster_yaml}" | head -1)"
     if [[ -z "${dns_name}" ]]; then
-        violation "clusters/${cluster}: no CLUSTER_DNS= in config/11-cluster.yaml"
+        violation "clusters/${cluster}: no dns value in config/11-cluster.yaml"
     elif [[ "${dns_name%%.*}" != "${cluster}" ]]; then
-        violation "clusters/${cluster}: directory name must equal the first segment of CLUSTER_DNS (got '${dns_name}')"
+        violation "clusters/${cluster}: directory name must equal the first segment of the dns value (got '${dns_name}')"
     fi
 done
 

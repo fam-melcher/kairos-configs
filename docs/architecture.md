@@ -50,6 +50,7 @@ layer configuration instead of duplicating it.
 │   ├── base/
 │   │   └── 00-base.yaml    # configuration shared by every node
 │   ├── cluster/            # value-free consumers, shared by all clusters (ADR 0013)
+│   │   ├── 12-tls-san.yaml       # tls-san renderer
 │   │   ├── 13-join.yaml          # join target renderer; installer-selected (ADR 0011)
 │   │   └── 15-kube-vip.yaml      # kube-vip manifest renderer
 │   └── roles/              # cluster-neutral role fragments
@@ -58,7 +59,7 @@ layer configuration instead of duplicating it.
 ├── clusters/               # one directory per cluster (ADR 0012);
 │   └── <name>/             # name = first segment of the cluster DNS name
 │       ├── config/
-│       │   ├── 11-cluster.yaml   # THE cluster values: VIP + DNS name (ADR 0013)
+│       │   ├── 11-cluster.yaml   # THE cluster values (pure data, ADR 0013)
 │       │   └── …                 # genuinely cluster-specific extras (e.g. 14-net-mtu)
 │       ├── nodes/
 │       │   └── node-<id>/

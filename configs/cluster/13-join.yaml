@@ -16,5 +16,6 @@ stages:
         - |
           . /etc/kairos-cluster/cluster.env
           umask 077
+          mkdir -p /etc/rancher/k3s/config.yaml.d
           printf 'server: https://%s:6443\n' "${VIP}" \
               > /etc/rancher/k3s/config.yaml.d/20-join.yaml

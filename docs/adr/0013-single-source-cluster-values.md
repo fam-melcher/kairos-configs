@@ -33,18 +33,33 @@ templating engine (ADR 0004 deliberately has none)?
 Option 3.
 
 - `clusters/<name>/config/11-cluster.yaml` is the **single place** a
-  cluster's VIP and DNS name are defined. It writes `cluster.env` and
-  renders the tls-san drop-in in the same initramfs stage — two steps in
-  one file, because yip guarantees step order *within* a file (the known
-  cross-file interleaving does not apply).
-- Consumers became value-free and therefore cluster-neutral, and moved to
-  shared `configs/cluster/`:
+  cluster's values are defined — and it is **pure data**, no stages, no
+  rendering:
+
+  ```yaml
+  values:
+    vip: "192.168.30.2"
+    dns: "k8s-prod.home.fam-melcher.net"
+  ```
+
+- The magic lives elsewhere. The installer's dispatcher converts every
+  scalar entry under `values:` generically to `KEY=VALUE` (dash →
+  underscore, uppercased, quotes stripped) and stages a *generated*
+  cloud-config fragment that ships them to the installed system as
+  `/etc/kairos-cluster/cluster.env` — the same pattern as the generated
+  token fragment (ADR 0008). Future scalar values need no dispatcher
+  change; lists and nested maps are added to the converter when a
+  consumer needs them.
+- Consumers are value-free and therefore cluster-neutral, shared in
+  `configs/cluster/`, all rendering at boot stage from `cluster.env`:
+  - `12-tls-san.yaml` renders the tls-san drop-in (`${VIP}`, `${DNS}`);
   - `13-join.yaml` (BOOTSTRAP-ROLE, installer-selected) renders the join
-    target at boot stage;
+    target;
   - `15-kube-vip.yaml` stages the manifest with an `@VIP@` token and
-    renders it at boot stage.
-  Boot runs strictly after initramfs, so `cluster.env` provably exists;
-  both renders are idempotent on every boot.
+    renders it.
+  Boot runs strictly after initramfs (where the generated values fragment
+  writes `cluster.env`), so the values provably exist; all renders are
+  idempotent on every boot.
 - The prod-only MTU settings left `12-cluster.yaml` (now gone) for their
   own fragment `clusters/k8s-prod/config/14-net-mtu.yaml`.
 - `fragments.list` is **composed, not templated**: `add-node.sh` builds it
@@ -52,9 +67,10 @@ Option 3.
   dir and `configs/cluster/`, sorted by numeric prefix, + the node
   fragment. `templates/fragments.list.tmpl` is gone; new cluster
   fragments join future node lists automatically.
-- The dispatcher (ADR 0011 discovery) and the validator read `VIP=` /
-  `CLUSTER_DNS=` from `11-cluster.yaml`; the validator additionally
-  requires every node list to contain its cluster's values fragment.
+- The dispatcher's discovery (ADR 0011) reads `VIP=`/`DNS=` from the
+  generated fragment; the validator reads `vip:`/`dns:` from the values
+  file and additionally requires every node list to contain its cluster's
+  values fragment.
 - This is not a repository templating engine: the repo stays literal, and
   rendering happens on the node from values the node was shipped —
   ADR 0004's decision stands. Amends ADR 0012 (the per-cluster config dir
