@@ -1,0 +1,27 @@
+#cloud-config
+# Cluster values — the SINGLE place this cluster's VIP and DNS name are
+# defined (ADR 0013). Every consumer (tls-san drop-in below, join target,
+# kube-vip manifest) renders from /etc/kairos-cluster/cluster.env at run
+# time; no other repository file may carry these values.
+#
+# Both steps live in this one file on purpose: yip guarantees step order
+# within a file, so the render step always sees cluster.env.
+
+stages:
+  initramfs:
+    - name: "Cluster values"
+      files:
+        - path: /etc/kairos-cluster/cluster.env
+          permissions: 0644
+          owner: 0
+          group: 0
+          content: |
+            VIP=192.168.1.11
+            CLUSTER_DNS=k8s-dev.home.fam-melcher.net
+    - name: "Render K3s tls-san configuration"
+      commands:
+        - |
+          . /etc/kairos-cluster/cluster.env
+          umask 077
+          printf 'tls-san:\n  - %s\n  - %s\n' "${VIP}" "${CLUSTER_DNS}" \
+              > /etc/rancher/k3s/config.yaml.d/10-env.yaml

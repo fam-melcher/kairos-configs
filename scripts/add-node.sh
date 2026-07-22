@@ -79,9 +79,20 @@ sed -e "s|@NODE_HOSTNAME@|${node_id}|g" \
     -e "s|@NODE_INSTALL_DEVICE@|${device}|g" \
     "${repo_root}/templates/20-node.yaml.tmpl" > "${node_dir}/20-${node_id}.yaml"
 
-sed -e "s|@NODE_ID@|${node_id}|g" \
-    -e "s|@CLUSTER@|${cluster}|g" \
-    "${repo_root}/templates/fragments.list.tmpl" > "${node_dir}/fragments.list"
+# Compose the fragment list instead of instantiating a template: base +
+# every non-bootstrap fragment from the cluster's config dir and the
+# shared cluster dir (ordered by numeric basename prefix) + the node
+# fragment. New cluster fragments join future node lists automatically.
+{
+    echo "configs/base/00-base.yaml"
+    for f in "${repo_root}/clusters/${cluster}/config/"*.yaml \
+        "${repo_root}/configs/cluster/"*.yaml; do
+        [[ -f "${f}" ]] || continue
+        grep -q 'BOOTSTRAP-ROLE' "${f}" && continue
+        printf '%s\t%s\n' "$(basename "${f}")" "${f#"${repo_root}/"}"
+    done | sort | cut -f2
+    echo "clusters/${cluster}/nodes/${node_id}/20-${node_id}.yaml"
+} > "${node_dir}/fragments.list"
 
 echo "add-node: created ${node_dir} (cluster: ${cluster}, device: ${device})"
 echo "add-node: review the network section in 20-${node_id}.yaml, then commit and push."

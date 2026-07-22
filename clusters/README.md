@@ -6,10 +6,16 @@ the cluster's DNS name** (`clusters/k8s-prod` ⇔
 
 ```text
 clusters/<name>/
-├── config/          # cluster-specific fragments: VIP/tls-san, join target, kube-vip
+├── config/          # 11-cluster.yaml (THE cluster values, ADR 0013) + cluster-specific extras
 ├── nodes/           # one directory per node of this cluster
 └── secrets/         # SOPS-encrypted material only (per-cluster age recipients)
 ```
+
+**Single source of values (ADR 0013):** a cluster's VIP and DNS name live
+exactly once, in `config/11-cluster.yaml`. Everything that needs them
+(tls-san drop-in, join target, kube-vip manifest) renders on the node
+from `/etc/kairos-cluster/cluster.env`; the shared renderers live in
+`configs/cluster/`. Changing a VIP is a one-line edit.
 
 Create a new cluster with `scripts/add-cluster.sh <dns-name> <vip>` — it
 scaffolds the directories, renders the config fragments from

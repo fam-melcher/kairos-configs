@@ -49,6 +49,7 @@ ensure_file() {
 # --- Directory skeleton ------------------------------------------------------
 
 ensure_dir "configs/base"
+ensure_dir "configs/cluster"
 ensure_dir "configs/roles"
 ensure_dir "clusters"
 ensure_dir "templates/cluster"

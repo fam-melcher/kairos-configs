@@ -149,22 +149,23 @@ rm -f "${list_file}"
 #   - answer with unexpected SANs          -> FATAL: something else owns
 #     the VIP; initialising next to it would create a twin cluster.
 #
-# The probe parameters come from the fragments themselves — the expected
-# DNS name from the tls-san list (12-cluster.yaml, already staged), the
-# VIP from the join target (13-join.yaml) — so no value exists twice.
+# The probe parameters come from the cluster's single values fragment
+# (11-cluster.yaml, already staged in /oem — ADR 0013), so no value
+# exists twice anywhere.
 
-join_fragment="clusters/${CLUSTER}/config/13-join.yaml"
+join_fragment="configs/cluster/13-join.yaml"
 join_file="$(mktemp)"
 fetch "${CONFIG_BASE_URL}/${join_fragment}" "${join_file}" \
     || fail "failed to fetch ${join_fragment}"
 
-vip="$(sed -n 's|^ *server: https://\([0-9.][0-9.]*\):6443$|\1|p' "${join_file}" | head -1)"
-[ -n "${vip}" ] || fail "no VIP found in ${join_fragment} (expected 'server: https://<ip>:6443')"
+vars_file="${oem_dir}/11-cluster.yaml"
+[ -r "${vars_file}" ] || fail "11-cluster.yaml not staged — fragments.list must list the cluster values fragment"
 
-# First bare list entry in the staged cluster fragment that contains a
-# letter is the cluster DNS name; plain IPs never match.
-dns_name="$(sed -n 's/^ *- \([a-z0-9.-]*[a-z][a-z0-9.-]*\)$/\1/p' "${oem_dir}/12-cluster.yaml" | head -1)"
-[ -n "${dns_name}" ] || fail "no cluster DNS name found in tls-san of 12-cluster.yaml"
+vip="$(sed -n 's/^ *VIP=\([0-9.][0-9.]*\)$/\1/p' "${vars_file}" | head -1)"
+[ -n "${vip}" ] || fail "no VIP= found in 11-cluster.yaml"
+
+dns_name="$(sed -n 's/^ *CLUSTER_DNS=\([a-z0-9.-][a-z0-9.-]*\)$/\1/p' "${vars_file}" | head -1)"
+[ -n "${dns_name}" ] || fail "no CLUSTER_DNS= found in 11-cluster.yaml"
 
 echo "dispatch: probing for existing cluster at https://${vip}:6443 (expecting DNS SAN ${dns_name})"
 

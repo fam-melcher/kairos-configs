@@ -1,4 +1,5 @@
 configs/base/00-base.yaml
-clusters/k8s-prod/config/12-cluster.yaml
-clusters/k8s-prod/config/15-kube-vip.yaml
+clusters/k8s-prod/config/11-cluster.yaml
+clusters/k8s-prod/config/14-net-mtu.yaml
+configs/cluster/15-kube-vip.yaml
 clusters/k8s-prod/nodes/node-cf1b52c0/20-node-cf1b52c0.yaml

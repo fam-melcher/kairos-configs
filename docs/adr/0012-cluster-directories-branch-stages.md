@@ -38,7 +38,11 @@ Option 3.
 
 - Layout: `clusters/<name>/{config,nodes,secrets}` per cluster; shared,
   environment-neutral fragments stay global (`configs/base`,
-  `configs/roles`, `templates/`).
+  `configs/roles`, `templates/`). (Amended 2026-07-22: the per-cluster
+  config dir holds the values fragment `11-cluster.yaml` plus genuinely
+  cluster-specific extras; the value-free consumers moved to shared
+  `configs/cluster/` — see
+  [ADR 0013](0013-single-source-cluster-values.md).)
 - **Naming rule**: the cluster directory name equals the first segment of
   the cluster's DNS name (`clusters/k8s-prod` ⇔
   `k8s-prod.home.fam-melcher.net`). Enforced by `scripts/validate-nodes.sh`

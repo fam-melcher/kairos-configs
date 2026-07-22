@@ -4,18 +4,19 @@
 #
 # Node definitions describe permanent node configuration only. Bootstrap
 # role selection is an installer-time decision and must never be encoded
-# in node state. Concretely, for every clusters/*/nodes/*/fragments.list
-# and the template:
+# in node state. Concretely, for every clusters/*/nodes/*/fragments.list:
 #
 #   1. every listed path must exist in the repository
 #   2. no listed path may point to a fragment carrying the BOOTSTRAP-ROLE
 #      marker (installer-selected fragments, ADR 0011)
 #   3. the known bootstrap fragment names are rejected even if someone
 #      strips the marker
+#   4. the list must contain its own cluster's values fragment
+#      clusters/<name>/config/11-cluster.yaml (ADR 0013)
 #
-# Additionally the cluster naming invariant (ADR 0012): every cluster
-# directory name must equal the first segment of the DNS SAN in its
-# config/12-cluster.yaml (clusters/k8s-prod ⇔ k8s-prod.home…).
+# Additionally per cluster: config/11-cluster.yaml must exist, and the
+# naming invariant (ADR 0012) must hold — the directory name equals the
+# first segment of CLUSTER_DNS (clusters/k8s-prod ⇔ k8s-prod.home…).
 #
 # Exit code 0 = all invariants hold; 1 = violations (printed one per line).
 #
@@ -35,21 +36,24 @@ violation() {
     errors=$((errors + 1))
 }
 
-lists=("${repo_root}"/clusters/*/nodes/*/fragments.list "${repo_root}/templates/fragments.list.tmpl")
+lists=("${repo_root}"/clusters/*/nodes/*/fragments.list)
 
 for list in "${lists[@]}"; do
     [[ -f "${list}" ]] || continue
     rel_list="${list#"${repo_root}"/}"
+    list_cluster="${rel_list#clusters/}"
+    list_cluster="${list_cluster%%/*}"
+    has_vars=0
 
     while IFS= read -r fragment; do
         [[ -n "${fragment}" ]] || continue
 
-        # Template placeholders cannot be resolved to files; check names only.
-        if [[ "${fragment}" != *@NODE_ID@* && "${fragment}" != *@CLUSTER@* \
-            && ! -f "${repo_root}/${fragment}" ]]; then
+        if [[ ! -f "${repo_root}/${fragment}" ]]; then
             violation "${rel_list}: listed fragment does not exist: ${fragment}"
             continue
         fi
+
+        [[ "${fragment}" == "clusters/${list_cluster}/config/11-cluster.yaml" ]] && has_vars=1
 
         for name in "${known_bootstrap_names[@]}"; do
             if [[ "$(basename "${fragment}")" == "${name}" ]]; then
@@ -57,11 +61,14 @@ for list in "${lists[@]}"; do
             fi
         done
 
-        if [[ "${fragment}" != *@NODE_ID@* && "${fragment}" != *@CLUSTER@* ]] \
-            && grep -q "${marker}" "${repo_root}/${fragment}"; then
+        if grep -q "${marker}" "${repo_root}/${fragment}"; then
             violation "${rel_list}: references ${marker}-marked fragment ${fragment} — bootstrap roles are installer-selected (ADR 0011)"
         fi
     done < "${list}"
+
+    if [[ "${has_vars}" -eq 0 ]]; then
+        violation "${rel_list}: missing the cluster values fragment clusters/${list_cluster}/config/11-cluster.yaml (ADR 0013)"
+    fi
 done
 
 # --- Cluster naming invariant (ADR 0012) --------------------------------------
@@ -69,18 +76,18 @@ done
 for cluster_dir in "${repo_root}"/clusters/*/; do
     [[ -d "${cluster_dir}" ]] || continue
     cluster="$(basename "${cluster_dir}")"
-    cluster_yaml="${cluster_dir}config/12-cluster.yaml"
+    cluster_yaml="${cluster_dir}config/11-cluster.yaml"
 
     if [[ ! -f "${cluster_yaml}" ]]; then
-        violation "clusters/${cluster}: missing config/12-cluster.yaml"
+        violation "clusters/${cluster}: missing config/11-cluster.yaml (ADR 0013)"
         continue
     fi
 
-    dns_name="$(sed -n 's/^ *- \([a-z0-9.-]*[a-z][a-z0-9.-]*\)$/\1/p' "${cluster_yaml}" | head -1)"
+    dns_name="$(sed -n 's/^ *CLUSTER_DNS=\([a-z0-9.-][a-z0-9.-]*\)$/\1/p' "${cluster_yaml}" | head -1)"
     if [[ -z "${dns_name}" ]]; then
-        violation "clusters/${cluster}: no DNS name in tls-san of config/12-cluster.yaml"
+        violation "clusters/${cluster}: no CLUSTER_DNS= in config/11-cluster.yaml"
     elif [[ "${dns_name%%.*}" != "${cluster}" ]]; then
-        violation "clusters/${cluster}: directory name must equal the first DNS segment of its SAN (got '${dns_name}')"
+        violation "clusters/${cluster}: directory name must equal the first segment of CLUSTER_DNS (got '${dns_name}')"
     fi
 done
 

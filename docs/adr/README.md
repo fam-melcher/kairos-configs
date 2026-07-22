@@ -19,7 +19,8 @@ reference their replacement.
 | 0009 | [Branch and environment strategy](0009-branch-environment-strategy.md) | Superseded by 0012 |
 | 0010 | [Node identity from hashed product UUID](0010-node-identity-hash.md) | Accepted |
 | 0011 | [Zero-init bootstrap: installer-time role discovery](0011-zero-init-bootstrap.md) | Accepted (amended 2026-07-22) |
-| 0012 | [Cluster directories, branch stages](0012-cluster-directories-branch-stages.md) | Accepted |
+| 0012 | [Cluster directories, branch stages](0012-cluster-directories-branch-stages.md) | Accepted (amended 2026-07-22) |
+| 0013 | [Single-source cluster values](0013-single-source-cluster-values.md) | Accepted |
 
 ## Creating a new ADR
 

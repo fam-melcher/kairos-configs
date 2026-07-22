@@ -49,15 +49,17 @@ layer configuration instead of duplicating it.
 ├── configs/
 │   ├── base/
 │   │   └── 00-base.yaml    # configuration shared by every node
+│   ├── cluster/            # value-free consumers, shared by all clusters (ADR 0013)
+│   │   ├── 13-join.yaml          # join target renderer; installer-selected (ADR 0011)
+│   │   └── 15-kube-vip.yaml      # kube-vip manifest renderer
 │   └── roles/              # cluster-neutral role fragments
 │       ├── 10-server-init.yaml   # --cluster-init; installer-selected (ADR 0011)
 │       └── 10-server-join.yaml   # joining server; installer-selected (ADR 0011)
 ├── clusters/               # one directory per cluster (ADR 0012);
 │   └── <name>/             # name = first segment of the cluster DNS name
 │       ├── config/
-│       │   ├── 12-cluster.yaml   # VIP + cluster DNS name (tls-san) via K3s config drop-in
-│       │   ├── 13-join.yaml      # join target; installer-selected (ADR 0011)
-│       │   └── 15-kube-vip.yaml  # control plane VIP (auto-deploy manifest)
+│       │   ├── 11-cluster.yaml   # THE cluster values: VIP + DNS name (ADR 0013)
+│       │   └── …                 # genuinely cluster-specific extras (e.g. 14-net-mtu)
 │       ├── nodes/
 │       │   └── node-<id>/
 │       │       ├── 20-node-<id>.yaml
@@ -102,7 +104,8 @@ at install time (ADR 0011) and the token is staged by the dispatcher:
 |-------|-----------------------------------|--------|-------------|------------------------------------------------|
 | Base    | `configs/base/00-base.yaml`             | `00-`  | fragments.list | users, SSH keys, install defaults, OS settings |
 | Role    | `configs/roles/10-*.yaml`               | `10-`  | installer (ADR 0011) | K3s bootstrap role (init/join), cluster-neutral |
-| Cluster | `clusters/<name>/config/1[2-5]-*.yaml`  | `12-`–`15-` | fragments.list, except `13-join.yaml` (installer) | VIP + cluster DNS name, join target, kube-vip — cluster-specific (ADR 0012) |
+| Values  | `clusters/<name>/config/11-cluster.yaml` | `11-` | fragments.list | THE cluster values: VIP + DNS name (ADR 0013) |
+| Cluster | `clusters/<name>/config/1[2-9]-*.yaml` + `configs/cluster/1[2-9]-*.yaml` | `12-`–`19-` | fragments.list, except `13-join.yaml` (installer) | cluster extras + shared value-free renderers (join target, kube-vip) |
 | Node    | `clusters/<name>/nodes/node-<id>/20-*.yaml` | `20-` | fragments.list | hostname, install device, network              |
 | Token   | staged by the dispatcher                | `30-`  | dispatcher  | K3s cluster token (never committed)            |
 
