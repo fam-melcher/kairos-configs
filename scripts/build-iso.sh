@@ -136,10 +136,12 @@ mkdir -p "${overlay_dir}"
 
 # --- Static sops binary (cached in build/, checksum-verified) -----------------
 
+command -v yq > /dev/null 2>&1 || fail "yq not found (needed on the build machine — https://github.com/mikefarah/yq)"
+
 if [[ "${SOPS_VERSION}" == "latest" ]]; then
     SOPS_VERSION="$(curl -fsSL https://api.github.com/repos/getsops/sops/releases/latest \
-        | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p')"
-    [[ -n "${SOPS_VERSION}" ]] || fail "could not resolve latest sops release"
+        | yq eval '.tag_name' -)"
+    [[ -n "${SOPS_VERSION}" && "${SOPS_VERSION}" != "null" ]] || fail "could not resolve latest sops release"
 fi
 echo "build-iso: bundling sops ${SOPS_VERSION}"
 
@@ -164,8 +166,8 @@ actual="$(shasum -a 256 "${build_dir}/${sops_asset}" | awk '{print $1}')"
 
 if [[ "${YQ_VERSION}" == "latest" ]]; then
     YQ_VERSION="$(curl -fsSL https://api.github.com/repos/mikefarah/yq/releases/latest \
-        | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p')"
-    [[ -n "${YQ_VERSION}" ]] || fail "could not resolve latest yq release"
+        | yq eval '.tag_name' -)"
+    [[ -n "${YQ_VERSION}" && "${YQ_VERSION}" != "null" ]] || fail "could not resolve latest yq release"
 fi
 echo "build-iso: bundling yq ${YQ_VERSION}"
 
