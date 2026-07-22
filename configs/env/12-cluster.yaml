@@ -18,6 +18,7 @@ stages:
           content: |
             tls-san:
               - 192.168.30.2
+              - k8s-prod.home.fam-melcher.net
     # The routed path into this network carries less than 1500 bytes; the
     # DHCP server announces the effective MTU via option 26. networkd
     # ignores that option unless told otherwise — without this, large

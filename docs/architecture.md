@@ -49,11 +49,11 @@ layer configuration instead of duplicating it.
 │   ├── base/
 │   │   └── 00-base.yaml    # configuration shared by every node
 │   ├── roles/              # environment-neutral role fragments
-│   │   ├── 10-server-init.yaml   # first server: --cluster-init (one per cluster)
-│   │   └── 10-server-join.yaml   # all other servers
+│   │   ├── 10-server-init.yaml   # --cluster-init; installer-selected (ADR 0011)
+│   │   └── 10-server-join.yaml   # joining server; installer-selected (ADR 0011)
 │   └── env/                # BRANCH-SPECIFIC environment values (ADR 0009)
-│       ├── 12-cluster.yaml       # VIP/tls-san via K3s config drop-in
-│       ├── 13-join.yaml          # join target (join nodes only)
+│       ├── 12-cluster.yaml       # VIP + cluster DNS name (tls-san) via K3s config drop-in
+│       ├── 13-join.yaml          # join target; installer-selected (ADR 0011)
 │       └── 15-kube-vip.yaml      # control plane VIP (auto-deploy manifest)
 ├── nodes/                  # one directory per node (ADR 0007)
 │   └── node-<id>/
@@ -77,21 +77,28 @@ Rationale and considered alternatives: see
 
 ## Configuration Strategy
 
-Configuration is split into layers, combined per node via its
-`fragments.list`:
+Configuration is split into layers. Permanent layers are combined per node
+via its `fragments.list`; the bootstrap role is selected by the installer
+at install time (ADR 0011) and the token is staged by the dispatcher:
 
-| Layer | Location                          | Prefix | Content                                        |
-|-------|-----------------------------------|--------|------------------------------------------------|
-| Base  | `configs/base/00-base.yaml`       | `00-`  | users, SSH keys, install defaults, OS settings |
-| Role  | `configs/roles/10-*.yaml`         | `10-`  | K3s role (init/join), environment-neutral      |
-| Env   | `configs/env/1[2-5]-*.yaml`       | `12-`–`15-` | VIP, join target, kube-vip — branch-specific (ADR 0009) |
-| Node  | `nodes/node-<id>/20-*.yaml`       | `20-`  | hostname, install device, network              |
-| Token | staged by the dispatcher          | `30-`  | K3s cluster token (never committed)            |
+| Layer | Location                          | Prefix | Selected by | Content                                        |
+|-------|-----------------------------------|--------|-------------|------------------------------------------------|
+| Base  | `configs/base/00-base.yaml`       | `00-`  | fragments.list | users, SSH keys, install defaults, OS settings |
+| Role  | `configs/roles/10-*.yaml`         | `10-`  | installer (ADR 0011) | K3s bootstrap role (init/join), environment-neutral |
+| Env   | `configs/env/1[2-5]-*.yaml`       | `12-`–`15-` | fragments.list, except `13-join.yaml` (installer) | VIP + cluster DNS name, join target, kube-vip — branch-specific (ADR 0009) |
+| Node  | `nodes/node-<id>/20-*.yaml`       | `20-`  | fragments.list | hostname, install device, network              |
+| Token | staged by the dispatcher          | `30-`  | dispatcher  | K3s cluster token (never committed)            |
 
 The numeric prefixes define the merge order used by Kairos. Later fragments
 override or extend earlier ones. There is deliberately no templating
 engine; placeholders exist only in `templates/`.
 Details: [ADR 0004](adr/0004-kairos-configuration-strategy.md).
+
+Repository invariant (enforced by `scripts/validate-nodes.sh` in CI):
+
+> Node definitions describe permanent node configuration only. Bootstrap
+> role selection is an installer-time decision and must never be encoded
+> in node state.
 
 ## Node Identity
 
@@ -111,8 +118,10 @@ One generic installer ISO serves all nodes ([ADR 0008](adr/0008-installer-config
    cluster age key, config URL pinned to a branch). The ISO embeds a
    private key and is therefore secret material.
 2. The machine boots the ISO; the dispatcher derives the node ID, fetches
-   the fragments named in `nodes/<id>/fragments.list` into `/oem`, decrypts
-   the K3s token, and stages it as `30-k3s-token.yaml`.
+   the fragments named in `nodes/<id>/fragments.list` into `/oem`, probes
+   for the existing cluster and stages the join or init role accordingly
+   (ADR 0011), then decrypts the K3s token and stages it as
+   `30-k3s-token.yaml`.
 3. The Kairos auto-installer applies the staged configuration and powers
    the machine off. On headless hosts the powered-down state is the
    "installation finished" signal: remove the boot medium, power on, the
@@ -121,8 +130,11 @@ One generic installer ISO serves all nodes ([ADR 0008](adr/0008-installer-config
    install nothing until their directory appears — nothing installs by
    accident.
 
-Bootstrap order for a new cluster: the `10-server-init` node first; once
-the VIP answers, the remaining nodes in any order.
+Bootstrap order for a new cluster: none — nodes install in any order. The
+first installer that finds no cluster on the VIP initialises it; every
+later installer finds the cluster (API certificate SAN check) and joins
+(ADR 0011). Avoid starting several installs simultaneously onto an empty
+network; that is the one race the v0.9 discovery does not arbitrate.
 
 ## Secret Management
 
@@ -138,7 +150,8 @@ Secrets are never committed in plaintext (ADR 0005):
 
 ## Future Extensions
 
-- CI validation: YAML lint, cloud-config schema checks, placeholder checks
+- CI validation beyond the existing invariant/shellcheck workflow: YAML
+  lint, cloud-config schema checks, placeholder checks
 - Netboot provisioning (AuroraBoot) replacing per-machine ISO boots
 - HashiCorp Vault for runtime secrets; SOPS remains for bootstrap secrets
 - GitOps repository (Flux or Argo CD) for cluster workloads

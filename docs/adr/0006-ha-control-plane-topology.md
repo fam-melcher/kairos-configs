@@ -35,9 +35,13 @@ implemented?
 
 ## Decision
 
-- All nodes are K3s servers with embedded etcd. One node per cluster uses
-  `configs/roles/10-server-init.yaml` (`--cluster-init`); all others use
-  `10-server-join.yaml`, joining through the VIP.
+- All nodes are K3s servers with embedded etcd. Exactly one node per
+  cluster runs `--cluster-init` (`configs/roles/10-server-init.yaml`); all
+  others join through the VIP (`10-server-join.yaml`). Which fragment a
+  node gets is decided by the installer at install time — see
+  [ADR 0011](0011-zero-init-bootstrap.md); it is not encoded in node
+  state. (Amended 2026-07-22; originally one node's `fragments.list`
+  referenced the init role permanently.)
 - kube-vip (option 4) runs in ARP mode as a DaemonSet on all control plane
   nodes, deployed through the K3s auto-deploy manifest directory
   (`configs/roles/15-kube-vip.yaml`).
