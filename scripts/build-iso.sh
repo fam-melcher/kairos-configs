@@ -183,14 +183,22 @@ fi
 # undocumented-inline order; checksums_hashes_order names that order.
 # Locate the SHA-256 column the same way yq's own extract-checksum.sh does
 # instead of hardcoding a column number that could shift between releases.
-yq_hash_order="$(curl -fsSL "${yq_url}/checksums_hashes_order")"
-[[ -n "${yq_hash_order}" ]] || fail "could not fetch yq checksums_hashes_order"
-sha256_line="$(printf '%s\n' "${yq_hash_order}" | grep -n -m1 '^SHA-256$' | cut -d: -f1)"
+#
+# Both reference files are downloaded straight to disk and grepped as
+# files, never piped through a shell variable: the checksums file is
+# ~100KB, and `printf "$var" | grep -m1 ...` lets grep close the pipe
+# after its first match while printf is still writing — SIGPIPE, which
+# aborted the build under `set -o pipefail` (seen in practice, exit 141).
+yq_hash_order_file="${build_dir}/yq-checksums_hashes_order-${YQ_VERSION}"
+yq_checksums_file="${build_dir}/yq-checksums-${YQ_VERSION}"
+[[ -f "${yq_hash_order_file}" ]] || curl -fsSL "${yq_url}/checksums_hashes_order" -o "${yq_hash_order_file}"
+[[ -f "${yq_checksums_file}" ]] || curl -fsSL "${yq_url}/checksums" -o "${yq_checksums_file}"
+
+sha256_line="$(grep -n -m1 '^SHA-256$' "${yq_hash_order_file}" | cut -d: -f1)"
 [[ -n "${sha256_line}" ]] || fail "SHA-256 not found in yq checksums_hashes_order"
 yq_checksum_col=$((sha256_line + 1))
 
-yq_checksums="$(curl -fsSL "${yq_url}/checksums")"
-expected="$(printf '%s\n' "${yq_checksums}" | grep -m1 "^${yq_asset}[[:space:]]" \
+expected="$(grep -m1 "^${yq_asset}[[:space:]]" "${yq_checksums_file}" \
     | sed 's/  */\t/g' | cut -f"${yq_checksum_col}")"
 [[ -n "${expected}" ]] || fail "no SHA-256 for ${yq_asset} in yq checksums"
 
