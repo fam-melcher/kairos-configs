@@ -48,6 +48,7 @@ status_screen() {
     echo " Kairos installer — waiting for node configuration"
     echo "=============================================================="
     echo " Node ID      : ${node_id}"
+    echo " Environment  : ${branch} / ${CLUSTER}"
     echo " Product UUID : ${uuid}"
     echo " IP address   : ${_ip:-none} (iface ${_iface:-?}, MAC ${_mac:-?})"
     echo " Disks        :"
@@ -56,7 +57,7 @@ status_screen() {
     echo " Config URL   : ${list_url}"
     echo "--------------------------------------------------------------"
     echo " To provision this machine, run in the config repository:"
-    echo "   scripts/add-node.sh ${node_id} [install-device]"
+    echo "   scripts/add-node.sh ${CLUSTER} ${node_id} [install-device]"
     echo " then commit and push. Next check in 60s (poll #${poll})."
     echo "=============================================================="
 }
@@ -80,11 +81,16 @@ fetch() {
 [ -r "${uuid_file}" ] || fail "cannot read ${uuid_file}"
 [ -r "${script_dir}/dispatch.env" ] || fail "dispatch.env missing from overlay"
 
-# Provides CONFIG_BASE_URL, written at ISO build time.
+# Provides CONFIG_BASE_URL and CLUSTER, written at ISO build time.
 # shellcheck source=/dev/null
 . "${script_dir}/dispatch.env"
 
 [ -n "${CONFIG_BASE_URL:-}" ] || fail "CONFIG_BASE_URL not set in dispatch.env"
+[ -n "${CLUSTER:-}" ] || fail "CLUSTER not set in dispatch.env"
+
+# Branch = last path segment of the config URL; shown so an operator can
+# tell at a glance which stage/cluster combination this ISO serves.
+branch="${CONFIG_BASE_URL##*/}"
 
 # Node ID = first 8 hex of sha256 over the lowercased product UUID
 # (ADR 0010). Hashing the full UUID instead of taking its first segment
@@ -113,7 +119,7 @@ sleep 3
 # (scripts/add-node.sh), and have the installation continue on the next
 # poll — without another boot.
 list_file="$(mktemp)"
-list_url="${CONFIG_BASE_URL}/nodes/${node_id}/fragments.list"
+list_url="${CONFIG_BASE_URL}/clusters/${CLUSTER}/nodes/${node_id}/fragments.list"
 poll=1
 until probe "${list_url}" "${list_file}"; do
     status_screen
@@ -147,7 +153,7 @@ rm -f "${list_file}"
 # DNS name from the tls-san list (12-cluster.yaml, already staged), the
 # VIP from the join target (13-join.yaml) — so no value exists twice.
 
-join_fragment="configs/env/13-join.yaml"
+join_fragment="clusters/${CLUSTER}/config/13-join.yaml"
 join_file="$(mktemp)"
 fetch "${CONFIG_BASE_URL}/${join_fragment}" "${join_file}" \
     || fail "failed to fetch ${join_fragment}"
@@ -216,7 +222,7 @@ fetch "${CONFIG_BASE_URL}/${role_fragment}" "${oem_dir}/$(basename "${role_fragm
 # Inject the cluster token: fetch the encrypted secret, decrypt it with the
 # cluster age key from the overlay, stage it as the last fragment.
 token_file="$(mktemp)"
-fetch "${CONFIG_BASE_URL}/secrets/k3s-token.sops.yaml" "${token_file}" \
+fetch "${CONFIG_BASE_URL}/clusters/${CLUSTER}/secrets/k3s-token.sops.yaml" "${token_file}" \
     || fail "failed to fetch k3s token secret"
 
 token="$(SOPS_AGE_KEY_FILE="${script_dir}/cluster.agekey" \

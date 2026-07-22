@@ -1,29 +1,32 @@
 #!/usr/bin/env bash
 #
-# build-iso.sh — build the generic installer ISO for one environment.
+# build-iso.sh — build the generic installer ISO for one cluster.
 #
-# The environment is derived from the branch (ADR 0009):
-#   dev-vm-cluster -> dev   (nodes fetch their config from dev-vm-cluster)
-#   main           -> prod  (nodes fetch their config from main)
+# Branches are stages, directories are environments (ADR 0012):
+#   main  -> live configuration; the target cluster must be given explicitly
+#   dev   -> staging; defaults to the k8s-dev cluster, any cluster overridable
+#            (e.g. `build-iso.sh dev k8s-prod` tests prod config before merge)
 # Builds from any other branch are refused: an ISO must never point at a
 # branch that disappears after a merge.
 #
-# Produces build/iso/kairos-<version>-<arch>-<distro>-<env>.iso containing:
+# Produces build/iso/kairos-<version>-<arch>-<distro>-<branch>-<cluster>.iso:
 #   - iso/bootstrap.yaml as the baked cloud-config
 #   - a rootfs overlay with the dispatch trigger (/system/oem)
 #   - an ISO overlay with dispatch.sh, dispatch.env, a static sops binary
-#     and the environment's cluster age key
+#     and the cluster's age key
 #
 # Only tools missing from the hadron image are bundled (verified against
 # the image contents): curl ships with hadron, sops does not.
 #
-# WARNING: the resulting ISO embeds the private cluster age key of its
-# environment. Treat the image as secret material (ADR 0008).
+# WARNING: the resulting ISO embeds the private cluster age key. Treat the
+# image as secret material (ADR 0008).
 #
 # Usage:
-#   scripts/build-iso.sh [branch]
+#   scripts/build-iso.sh <branch> [cluster]
 #
-#   branch  dev-vm-cluster or main (default: currently checked-out branch)
+#   branch   main or dev
+#   cluster  name of a clusters/<name>/ directory; required for main,
+#            defaults to k8s-dev for dev
 #
 # Environment overrides:
 #   ARCH              target architecture: amd64 or arm64 (default: amd64)
@@ -32,7 +35,7 @@
 #   HADRON_VERSION    hadron flavor release
 #   KAIROS_IMAGE      full image override (skips construction from the above)
 #   AURORABOOT_IMAGE  AuroraBoot builder image
-#   AGE_KEY_FILE      cluster age key (default: .keys/homelab-<env>-cluster.agekey)
+#   AGE_KEY_FILE      cluster age key (default: .keys/<cluster>.agekey)
 #   SOPS_VERSION      sops release to bundle (default: latest — resolved at
 #                     build time so fixes arrive automatically; pin for
 #                     reproducible builds)
@@ -46,15 +49,33 @@ fail() {
     exit 1
 }
 
-# --- Environment from branch --------------------------------------------------
+# --- Branch (stage) and cluster (environment), ADR 0012 -----------------------
 
-branch="${1:-$(git -C "${repo_root}" rev-parse --abbrev-ref HEAD)}"
+[[ $# -ge 1 ]] || fail "usage: build-iso.sh <branch> [cluster]"
+
+branch="${1}"
+cluster="${2:-}"
 
 case "${branch}" in
-    dev-vm-cluster) env="dev" ;;
-    main) env="prod" ;;
-    *) fail "ISO builds are only supported from dev-vm-cluster or main (got '${branch}')" ;;
+    main)
+        [[ -n "${cluster}" ]] \
+            || fail "main builds require an explicit cluster (usage: build-iso.sh main <cluster>)"
+        ;;
+    dev)
+        cluster="${cluster:-k8s-dev}"
+        ;;
+    *) fail "ISO builds are only supported from main or dev (got '${branch}')" ;;
 esac
+
+available_clusters() {
+    local dir
+    for dir in "${repo_root}/clusters"/*/; do
+        [[ -d "${dir}" ]] && printf '%s ' "$(basename "${dir}")"
+    done
+}
+
+[[ -d "${repo_root}/clusters/${cluster}" ]] \
+    || fail "unknown cluster '${cluster}' — available: $(available_clusters)"
 
 # --- Versions (single source for image tag and ISO name) ----------------------
 
@@ -73,10 +94,10 @@ HADRON_VERSION="${HADRON_VERSION:-v0.4.0}"
 # flavor repositories are no longer updated by the release pipeline.
 KAIROS_IMAGE="${KAIROS_IMAGE:-quay.io/kairos/hadron:${HADRON_VERSION}-standard-${ARCH}-generic-v${KAIROS_VERSION}-${K8S_DISTRO}-${K8S_VERSION}}"
 AURORABOOT_IMAGE="${AURORABOOT_IMAGE:-quay.io/kairos/auroraboot:v0.25.2}"
-AGE_KEY_FILE="${AGE_KEY_FILE:-${repo_root}/.keys/homelab-${env}-cluster.agekey}"
+AGE_KEY_FILE="${AGE_KEY_FILE:-${repo_root}/.keys/${cluster}.agekey}"
 SOPS_VERSION="${SOPS_VERSION:-latest}"
 
-iso_name="kairos-${KAIROS_VERSION}-${ARCH}-${K8S_DISTRO}-${env}.iso"
+iso_name="kairos-${KAIROS_VERSION}-${ARCH}-${K8S_DISTRO}-${branch}-${cluster}.iso"
 config_repo_url="https://raw.githubusercontent.com/fam-melcher/kairos-configs"
 
 # --- Preconditions ------------------------------------------------------------
@@ -144,6 +165,7 @@ install -m 0600 "${AGE_KEY_FILE}" "${overlay_dir}/cluster.agekey"
 
 cat > "${overlay_dir}/dispatch.env" <<EOF
 CONFIG_BASE_URL="${config_repo_url}/${branch}"
+CLUSTER="${cluster}"
 EOF
 
 cp "${repo_root}/iso/bootstrap.yaml" "${build_dir}/bootstrap.yaml"
@@ -161,7 +183,7 @@ cp "${repo_root}/iso/91-dispatch.yaml" "${build_dir}/rootfs-overlay/system/oem/9
 state_volume="kairos-iso-state"
 
 echo "build-iso: image=${KAIROS_IMAGE}"
-echo "build-iso: env=${env} (config branch: ${branch})"
+echo "build-iso: cluster=${cluster} (config branch: ${branch})"
 echo "build-iso: output=${iso_name}"
 
 "${engine}" volume rm -f "${state_volume}" > /dev/null 2>&1 || true
@@ -191,4 +213,4 @@ mkdir -p "${build_dir}/iso"
 
 echo
 echo "build-iso: done — ${build_dir}/iso/${iso_name}"
-echo "build-iso: WARNING: the ISO contains the private ${env} cluster age key."
+echo "build-iso: WARNING: the ISO contains the private ${cluster} cluster age key."

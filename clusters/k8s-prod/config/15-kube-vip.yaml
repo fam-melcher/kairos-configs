@@ -1,5 +1,5 @@
 #cloud-config
-# Environment fragment — BRANCH-SPECIFIC (ADR 0009): kube-vip in ARP mode providing the control plane VIP
+# Cluster fragment — CLUSTER-SPECIFIC (ADR 0012): kube-vip in ARP mode providing the control plane VIP
 # 192.168.30.2 (ADR 0006). Deployed via the K3s auto-deploy manifest
 # directory; K3s applies it without manual kubectl steps.
 #

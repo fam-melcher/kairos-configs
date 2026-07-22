@@ -1,0 +1,21 @@
+#cloud-config
+# Cluster fragment — CLUSTER-SPECIFIC (ADR 0012): values for the k8s-dev
+# cluster; every cluster carries its own copy of this file under
+# clusters/<name>/config/.
+#
+# Cluster-wide settings for every node of this cluster. K3s options go
+# through its config drop-in directory so the role fragments stay free of
+# cluster values and remain shared.
+
+stages:
+  initramfs:
+    - name: "K3s environment configuration"
+      files:
+        - path: /etc/rancher/k3s/config.yaml.d/10-env.yaml
+          permissions: 0600
+          owner: 0
+          group: 0
+          content: |
+            tls-san:
+              - 192.168.1.11
+              - k8s-dev.home.fam-melcher.net

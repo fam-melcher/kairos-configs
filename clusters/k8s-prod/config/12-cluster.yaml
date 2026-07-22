@@ -1,11 +1,10 @@
 #cloud-config
-# Environment fragment — BRANCH-SPECIFIC (ADR 0009). main carries the
-# production values, dev-vm-cluster the development values; this file is
-# intentionally different per branch and never merged across environments.
+# Cluster fragment — CLUSTER-SPECIFIC (ADR 0012): every cluster carries its
+# own copy of this file under clusters/<name>/config/.
 #
 # Cluster-wide settings for every node of this environment. K3s options go
 # through its config drop-in directory so the role fragments stay free of
-# environment values and remain mergeable between branches.
+# cluster values and remain shared.
 
 stages:
   initramfs:

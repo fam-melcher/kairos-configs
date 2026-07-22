@@ -26,12 +26,13 @@ Ordered by priority:
 The homelab runs a K3s cluster on Kairos, an immutable, container-based
 Linux OS. The target state (ADR 0006):
 
-- control plane nodes only (currently planned: four); every node is a K3s
-  server with embedded etcd and also runs workloads
-- kube-vip in ARP mode provides the stable API endpoint `192.168.1.11`;
-  node failure moves the VIP, kubeconfigs never reference a node IP
-- heterogeneous hardware, currently a QEMU/UTM VM development cluster
-  (branch `dev-vm-cluster`)
+- control plane nodes only (currently planned: four per cluster); every
+  node is a K3s server with embedded etcd and also runs workloads
+- kube-vip in ARP mode provides each cluster's stable API endpoint (VIP in
+  `clusters/<name>/config/12-cluster.yaml`); node failure moves the VIP,
+  kubeconfigs never reference a node IP
+- two clusters (ADR 0012): `k8s-prod` on physical hardware, `k8s-dev` on
+  Hyper-V VMs for testing changes before promotion
 - cluster workloads managed via GitOps in a follow-up repository
 
 Kairos nodes are provisioned with cloud-config files. Kairos reads all
@@ -44,36 +45,52 @@ layer configuration instead of duplicating it.
 ```text
 .
 ├── README.md
-├── .sops.yaml              # SOPS creation rules (age recipients)
+├── .sops.yaml              # SOPS creation rules, one per cluster path (ADR 0012)
 ├── configs/
 │   ├── base/
 │   │   └── 00-base.yaml    # configuration shared by every node
-│   ├── roles/              # environment-neutral role fragments
-│   │   ├── 10-server-init.yaml   # --cluster-init; installer-selected (ADR 0011)
-│   │   └── 10-server-join.yaml   # joining server; installer-selected (ADR 0011)
-│   └── env/                # BRANCH-SPECIFIC environment values (ADR 0009)
-│       ├── 12-cluster.yaml       # VIP + cluster DNS name (tls-san) via K3s config drop-in
-│       ├── 13-join.yaml          # join target; installer-selected (ADR 0011)
-│       └── 15-kube-vip.yaml      # control plane VIP (auto-deploy manifest)
-├── nodes/                  # one directory per node (ADR 0007)
-│   └── node-<id>/
-│       ├── 20-node-<id>.yaml
-│       └── fragments.list  # ordered fragment set, read by the dispatcher
-├── templates/              # starting points for new node configurations
-├── secrets/                # SOPS-encrypted material only (enforced by .gitignore)
+│   └── roles/              # cluster-neutral role fragments
+│       ├── 10-server-init.yaml   # --cluster-init; installer-selected (ADR 0011)
+│       └── 10-server-join.yaml   # joining server; installer-selected (ADR 0011)
+├── clusters/               # one directory per cluster (ADR 0012);
+│   └── <name>/             # name = first segment of the cluster DNS name
+│       ├── config/
+│       │   ├── 12-cluster.yaml   # VIP + cluster DNS name (tls-san) via K3s config drop-in
+│       │   ├── 13-join.yaml      # join target; installer-selected (ADR 0011)
+│       │   └── 15-kube-vip.yaml  # control plane VIP (auto-deploy manifest)
+│       ├── nodes/
+│       │   └── node-<id>/
+│       │       ├── 20-node-<id>.yaml
+│       │       └── fragments.list  # ordered fragment set, read by the dispatcher
+│       └── secrets/        # SOPS-encrypted material only (enforced by .gitignore)
+├── templates/              # starting points for new node and cluster configurations
+│   └── cluster/            # rendered by scripts/add-cluster.sh
 ├── iso/
 │   ├── bootstrap.yaml      # cloud-config baked into the installer ISO
 │   └── dispatch.sh         # node self-dispatch (ADR 0008)
 ├── scripts/
+│   ├── add-cluster.sh      # scaffold a new cluster (dirs, config, key, sops, token)
+│   ├── add-node.sh         # scaffold a node inside a cluster
 │   ├── bootstrap.sh        # idempotent repository skeleton generator
-│   └── build-iso.sh        # builds the generic installer ISO (AuroraBoot)
+│   ├── build-iso.sh        # builds the installer ISO for one branch × cluster
+│   └── validate-nodes.sh   # repository invariants (CI)
 └── docs/
     ├── architecture.md
     └── adr/                # architecture decision records
 ```
 
 Rationale and considered alternatives: see
-[ADR 0002](adr/0002-repository-layout.md).
+[ADR 0002](adr/0002-repository-layout.md) and
+[ADR 0012](adr/0012-cluster-directories-branch-stages.md).
+
+## Branches and Environments
+
+Branches are stages, directories are environments (ADR 0012): `main` is
+what production machines poll, `dev` is the staging branch. A change flows
+feature branch → PR → `dev` → tested on the dev cluster → PR → `main`.
+Both branches carry all `clusters/<name>/` directories; a change to a
+cluster's directory only reaches its machines when it lands on the branch
+their ISO polls.
 
 ## Configuration Strategy
 
@@ -83,11 +100,11 @@ at install time (ADR 0011) and the token is staged by the dispatcher:
 
 | Layer | Location                          | Prefix | Selected by | Content                                        |
 |-------|-----------------------------------|--------|-------------|------------------------------------------------|
-| Base  | `configs/base/00-base.yaml`       | `00-`  | fragments.list | users, SSH keys, install defaults, OS settings |
-| Role  | `configs/roles/10-*.yaml`         | `10-`  | installer (ADR 0011) | K3s bootstrap role (init/join), environment-neutral |
-| Env   | `configs/env/1[2-5]-*.yaml`       | `12-`–`15-` | fragments.list, except `13-join.yaml` (installer) | VIP + cluster DNS name, join target, kube-vip — branch-specific (ADR 0009) |
-| Node  | `nodes/node-<id>/20-*.yaml`       | `20-`  | fragments.list | hostname, install device, network              |
-| Token | staged by the dispatcher          | `30-`  | dispatcher  | K3s cluster token (never committed)            |
+| Base    | `configs/base/00-base.yaml`             | `00-`  | fragments.list | users, SSH keys, install defaults, OS settings |
+| Role    | `configs/roles/10-*.yaml`               | `10-`  | installer (ADR 0011) | K3s bootstrap role (init/join), cluster-neutral |
+| Cluster | `clusters/<name>/config/1[2-5]-*.yaml`  | `12-`–`15-` | fragments.list, except `13-join.yaml` (installer) | VIP + cluster DNS name, join target, kube-vip — cluster-specific (ADR 0012) |
+| Node    | `clusters/<name>/nodes/node-<id>/20-*.yaml` | `20-` | fragments.list | hostname, install device, network              |
+| Token   | staged by the dispatcher                | `30-`  | dispatcher  | K3s cluster token (never committed)            |
 
 The numeric prefixes define the merge order used by Kairos. Later fragments
 override or extend earlier ones. There is deliberately no templating
@@ -113,22 +130,22 @@ Silicon hardware).
 
 One generic installer ISO serves all nodes ([ADR 0008](adr/0008-installer-config-dispatch.md)):
 
-1. `scripts/build-iso.sh` builds the ISO: Kairos base image + baked
-   bootstrap config + overlay (dispatcher, static sops binary, dedicated
-   cluster age key, config URL pinned to a branch). The ISO embeds a
-   private key and is therefore secret material.
+1. `scripts/build-iso.sh <branch> [cluster]` builds the ISO: Kairos base
+   image + baked bootstrap config + overlay (dispatcher, static sops
+   binary, the cluster's age key, config URL pinned to a branch, cluster
+   name). The ISO embeds a private key and is therefore secret material.
 2. The machine boots the ISO; the dispatcher derives the node ID, fetches
-   the fragments named in `nodes/<id>/fragments.list` into `/oem`, probes
-   for the existing cluster and stages the join or init role accordingly
-   (ADR 0011), then decrypts the K3s token and stages it as
-   `30-k3s-token.yaml`.
+   the fragments named in `clusters/<cluster>/nodes/<id>/fragments.list`
+   into `/oem`, probes for the existing cluster and stages the join or
+   init role accordingly (ADR 0011), then decrypts the K3s token and
+   stages it as `30-k3s-token.yaml`.
 3. The Kairos auto-installer applies the staged configuration and powers
    the machine off. On headless hosts the powered-down state is the
    "installation finished" signal: remove the boot medium, power on, the
    node starts (or joins) the cluster.
-4. Machines without a `nodes/<id>/` directory poll the repository and
-   install nothing until their directory appears — nothing installs by
-   accident.
+4. Machines without a node directory in their ISO's cluster poll the
+   repository and install nothing until the directory appears — nothing
+   installs by accident.
 
 Bootstrap order for a new cluster: none — nodes install in any order. The
 first installer that finds no cluster on the VIP initialises it; every
@@ -140,10 +157,12 @@ network; that is the one race the v0.9 discovery does not arbitrate.
 
 Secrets are never committed in plaintext (ADR 0005):
 
-1. **Bootstrap secrets** — SOPS-encrypted YAML in `secrets/` (age).
-   Recipients: engineer keys plus a dedicated cluster key that ships only
-   inside the installer ISO. `.gitignore` blocks everything in `secrets/`
-   except `*.sops.yaml` and documentation.
+1. **Bootstrap secrets** — SOPS-encrypted YAML in
+   `clusters/<name>/secrets/` (age), one recipient rule per cluster path
+   (ADR 0012). Recipients: engineer keys plus the cluster's dedicated key
+   that ships only inside that cluster's installer ISO. `.gitignore`
+   blocks everything in the secrets directories except `*.sops.yaml` and
+   documentation.
 2. **Runtime secrets** — planned via HashiCorp Vault or an
    external-secrets operator once the cluster runs; nothing in the current
    layout blocks that integration.

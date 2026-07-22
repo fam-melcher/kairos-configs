@@ -67,7 +67,10 @@ Generic ISO with self-dispatch (option 4):
   vs. join) is not part of the list; the dispatcher selects and fetches it
   after its cluster discovery probe — see
   [ADR 0011](0011-zero-init-bootstrap.md). (Amended 2026-07-22; the list
-  originally encoded the role.)
+  originally encoded the role. Second amendment 2026-07-22: node
+  directories now live at `clusters/<cluster>/nodes/<id>/` and the
+  dispatcher resolves all paths beneath `clusters/${CLUSTER}/` — see
+  [ADR 0012](0012-cluster-directories-branch-stages.md).)
 - Token path: the dispatcher fetches `secrets/k3s-token.sops.yaml`,
   decrypts it with a **dedicated cluster age key** shipped in the ISO
   overlay (never an engineer's personal key), and stages the token as
