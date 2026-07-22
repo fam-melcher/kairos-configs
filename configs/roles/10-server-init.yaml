@@ -1,9 +1,12 @@
 #cloud-config
+# BOOTSTRAP-ROLE: installer-selected (ADR 0011) — never reference from fragments.list
+#
 # Role fragment: first K3s server — initialises the embedded etcd cluster.
-# Used by exactly one node per cluster (ADR 0006); all other servers use
-# 10-server-join.yaml. Environment-specific values (VIP, join target) live
-# in configs/env/ (ADR 0009); the cluster token is injected at dispatch
-# time as /oem/30-k3s-token.yaml (ADR 0008).
+# Selected by the installer's dispatcher when its discovery probe finds no
+# existing cluster (ADR 0011); never listed in a node's fragments.list.
+# Environment-specific values (VIP, join target) live in configs/env/
+# (ADR 0009); the cluster token is injected at dispatch time as
+# /oem/30-k3s-token.yaml (ADR 0008).
 
 k3s:
   enabled: true

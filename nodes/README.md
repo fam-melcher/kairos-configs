@@ -11,19 +11,25 @@ Each directory contains:
 
 - `20-<node-id>.yaml` — node-specific cloud-config fragment (hostname,
   install device, network)
-- `fragments.list` — ordered list of all fragments this node is built from;
-  read by the installer's dispatcher (ADR 0008). The role fragment named
-  here decides whether the node initialises the cluster
-  (`10-server-init.yaml`, exactly one node) or joins it
-  (`10-server-join.yaml`).
+- `fragments.list` — ordered list of the node's permanent fragments; read
+  by the installer's dispatcher (ADR 0008). Whether the node initialises
+  the cluster or joins it is decided by the installer at install time
+  (ADR 0011) and is deliberately absent from this list.
+
+> Node definitions describe permanent node configuration only. Bootstrap
+> role selection is an installer-time decision and must never be encoded
+> in node state.
+
+`scripts/validate-nodes.sh` (run by CI) rejects any `fragments.list` that
+references a bootstrap fragment.
 
 ## Adding a node
 
 1. Read the machine's product UUID (command above, or Hyper-V:
    `Get-CimInstance -Namespace root\virtualization\v2
    Msvm_VirtualSystemSettingData | Select ElementName, BIOSGUID`).
-2. `scripts/add-node.sh <uuid> [join|init] [install-device]` — scaffolds
-   the node directory from the templates.
+2. `scripts/add-node.sh <uuid> [install-device]` — scaffolds the node
+   directory from the templates.
 3. Review the generated files (network section), commit, push.
 4. Boot the machine from the generic installer ISO — it selects this
    configuration by itself.

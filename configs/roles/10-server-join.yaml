@@ -1,8 +1,11 @@
 #cloud-config
-# Role fragment: K3s server joining the existing cluster. The join target
-# (VIP URL) comes from configs/env/13-join.yaml via the node's
-# fragments.list (ADR 0009); the cluster token is injected at dispatch
-# time (ADR 0008).
+# BOOTSTRAP-ROLE: installer-selected (ADR 0011) — never reference from fragments.list
+#
+# Role fragment: K3s server joining the existing cluster. Selected by the
+# installer's dispatcher when its discovery probe finds the running cluster
+# (ADR 0011); never listed in a node's fragments.list. The join target (VIP
+# URL) comes from configs/env/13-join.yaml, fetched together with this
+# fragment; the cluster token is injected at dispatch time (ADR 0008).
 
 k3s:
   enabled: true

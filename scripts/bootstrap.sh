@@ -71,9 +71,11 @@ Adding a node:
 3. Replace every `@VARIABLE@` placeholder; no placeholder may remain.
 4. Open a pull request.
 
-The node's full configuration is the ordered set:
-`configs/base/00-base.yaml`, `configs/roles/10-<role>.yaml`,
-`nodes/<hostname>/20-<hostname>.yaml`. See docs/adr/0004.
+The node's full configuration is the ordered set of its permanent
+fragments (`configs/base/00-base.yaml`, environment fragments,
+`nodes/<hostname>/20-<hostname>.yaml`; see docs/adr/0004) plus the
+bootstrap role selected by the installer at install time (docs/adr/0011).
+Bootstrap roles must never appear in a node's fragment set.
 EOF
 
 ensure_file "secrets/README.md" <<'EOF'

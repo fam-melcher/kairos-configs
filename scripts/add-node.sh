@@ -3,14 +3,17 @@
 # add-node.sh — scaffold the repository files for a new node.
 #
 # Usage:
-#   scripts/add-node.sh <uuid-or-node-id> [join|init] [install-device]
+#   scripts/add-node.sh <uuid-or-node-id> [install-device]
 #
 #   uuid-or-node-id  full product UUID, its first segment, or node-<id>
-#   role             join (default) or init (first server of a new cluster)
 #   install-device   target disk (default: /dev/sda)
 #
 # Creates nodes/node-<id>/ with the node fragment and fragments.list from
 # the templates. Refuses to overwrite an existing node directory.
+#
+# There is no role argument: whether a node joins the cluster or
+# initialises a new one is decided by the installer at install time
+# (ADR 0011); node definitions carry permanent configuration only.
 
 set -euo pipefail
 
@@ -21,16 +24,10 @@ fail() {
     exit 1
 }
 
-[[ $# -ge 1 ]] || fail "usage: add-node.sh <uuid-or-node-id> [join|init] [install-device]"
+[[ $# -ge 1 ]] || fail "usage: add-node.sh <uuid-or-node-id> [install-device]"
 
 raw="${1}"
-role="${2:-join}"
-device="${3:-/dev/sda}"
-
-case "${role}" in
-    join | init) ;;
-    *) fail "role must be 'join' or 'init', got '${role}'" ;;
-esac
+device="${2:-/dev/sda}"
 
 # Normalize the install device: accept bare names like "sda" or "nvme0n1".
 [[ "${device}" == /dev/* ]] || device="/dev/${device}"
@@ -69,16 +66,8 @@ sed -e "s|@NODE_HOSTNAME@|${node_id}|g" \
     -e "s|@NODE_INSTALL_DEVICE@|${device}|g" \
     "${repo_root}/templates/20-node.yaml.tmpl" > "${node_dir}/20-${node_id}.yaml"
 
-# init nodes must not carry the join target fragment (configs/env/13-join.yaml).
-if [[ "${role}" == "init" ]]; then
-    sed -e "s|@NODE_ID@|${node_id}|g" \
-        -e "s|10-server-join|10-server-init|g" \
-        -e "\|configs/env/13-join.yaml|d" \
-        "${repo_root}/templates/fragments.list.tmpl" > "${node_dir}/fragments.list"
-else
-    sed -e "s|@NODE_ID@|${node_id}|g" \
-        "${repo_root}/templates/fragments.list.tmpl" > "${node_dir}/fragments.list"
-fi
+sed -e "s|@NODE_ID@|${node_id}|g" \
+    "${repo_root}/templates/fragments.list.tmpl" > "${node_dir}/fragments.list"
 
-echo "add-node: created ${node_dir} (role: ${role}, device: ${device})"
+echo "add-node: created ${node_dir} (device: ${device})"
 echo "add-node: review the network section in 20-${node_id}.yaml, then commit and push."

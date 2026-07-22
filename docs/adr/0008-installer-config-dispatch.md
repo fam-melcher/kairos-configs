@@ -62,9 +62,12 @@ Generic ISO with self-dispatch (option 4):
   Uses the system curl (hadron ships it — verified against the image
   contents; only sops is missing and therefore bundled, resolved to the
   latest release at build time).
-- `nodes/<id>/fragments.list` — explicit, ordered fragment list per node.
-  This also encodes the node's role (init vs. join) without dispatcher
-  heuristics.
+- `nodes/<id>/fragments.list` — explicit, ordered fragment list per node,
+  containing permanent node configuration only. The bootstrap role (init
+  vs. join) is not part of the list; the dispatcher selects and fetches it
+  after its cluster discovery probe — see
+  [ADR 0011](0011-zero-init-bootstrap.md). (Amended 2026-07-22; the list
+  originally encoded the role.)
 - Token path: the dispatcher fetches `secrets/k3s-token.sops.yaml`,
   decrypts it with a **dedicated cluster age key** shipped in the ISO
   overlay (never an engineer's personal key), and stages the token as

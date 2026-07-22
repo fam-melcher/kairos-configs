@@ -5,10 +5,12 @@
 # Shipped in the installer ISO overlay together with dispatch.env, a
 # static sops binary and the cluster age key (ADR 0008). Derives the
 # node ID from the machine's product UUID (ADR 0007), downloads the
-# fragments listed in the node's fragments.list into /oem and injects the
-# decrypted K3s token. The Kairos auto-installer then proceeds with the
-# staged configuration: install.auto comes from the fetched base fragment,
-# so a machine whose dispatch fails stays in the live system.
+# fragments listed in the node's fragments.list into /oem, decides the
+# bootstrap role (join an existing cluster or initialise a new one,
+# ADR 0011) and injects the decrypted K3s token. The Kairos auto-installer
+# then proceeds with the staged configuration: install.auto comes from the
+# fetched base fragment, so a machine whose dispatch fails stays in the
+# live system.
 
 set -eu
 
@@ -21,9 +23,10 @@ fail() {
     exit 1
 }
 
-# hadron ships curl in the live system (verified against the image
-# contents); only sops is bundled in the overlay.
+# hadron ships curl and openssl in the live system (verified against the
+# image contents); only sops is bundled in the overlay.
 command -v curl > /dev/null 2>&1 || fail "curl not found in live system"
+command -v openssl > /dev/null 2>&1 || fail "openssl not found in live system"
 
 # probe <url> <output-file> — single silent attempt, used while polling for
 # a configuration that may not exist yet (a 404 is expected, not an error).
@@ -53,7 +56,7 @@ status_screen() {
     echo " Config URL   : ${list_url}"
     echo "--------------------------------------------------------------"
     echo " To provision this machine, run in the config repository:"
-    echo "   scripts/add-node.sh ${node_id} [join|init] [install-device]"
+    echo "   scripts/add-node.sh ${node_id} [install-device]"
     echo " then commit and push. Next check in 60s (poll #${poll})."
     echo "=============================================================="
 }
@@ -78,6 +81,7 @@ fetch() {
 [ -r "${script_dir}/dispatch.env" ] || fail "dispatch.env missing from overlay"
 
 # Provides CONFIG_BASE_URL, written at ISO build time.
+# shellcheck source=/dev/null
 . "${script_dir}/dispatch.env"
 
 [ -n "${CONFIG_BASE_URL:-}" ] || fail "CONFIG_BASE_URL not set in dispatch.env"
@@ -126,6 +130,88 @@ while IFS= read -r fragment; do
         || fail "failed to fetch ${fragment}"
 done < "${list_file}"
 rm -f "${list_file}"
+
+# --- Bootstrap role discovery (ADR 0011) -------------------------------
+#
+# fragments.list carries only permanent node configuration; whether this
+# node joins the existing cluster or initialises a new one is decided
+# here, at install time. The running cluster is authoritative for its own
+# existence: probe the VIP and inspect the presented API server
+# certificate. Three outcomes:
+#   - answer with the expected SANs        -> join
+#   - no answer after all attempts         -> genesis (cluster-init)
+#   - answer with unexpected SANs          -> FATAL: something else owns
+#     the VIP; initialising next to it would create a twin cluster.
+#
+# The probe parameters come from the fragments themselves — the expected
+# DNS name from the tls-san list (12-cluster.yaml, already staged), the
+# VIP from the join target (13-join.yaml) — so no value exists twice.
+
+join_fragment="configs/env/13-join.yaml"
+join_file="$(mktemp)"
+fetch "${CONFIG_BASE_URL}/${join_fragment}" "${join_file}" \
+    || fail "failed to fetch ${join_fragment}"
+
+vip="$(sed -n 's|^ *server: https://\([0-9.][0-9.]*\):6443$|\1|p' "${join_file}" | head -1)"
+[ -n "${vip}" ] || fail "no VIP found in ${join_fragment} (expected 'server: https://<ip>:6443')"
+
+# First bare list entry in the staged cluster fragment that contains a
+# letter is the cluster DNS name; plain IPs never match.
+dns_name="$(sed -n 's/^ *- \([a-z0-9.-]*[a-z][a-z0-9.-]*\)$/\1/p' "${oem_dir}/12-cluster.yaml" | head -1)"
+[ -n "${dns_name}" ] || fail "no cluster DNS name found in tls-san of 12-cluster.yaml"
+
+echo "dispatch: probing for existing cluster at https://${vip}:6443 (expecting DNS SAN ${dns_name})"
+
+# probe_cluster — one attempt. Returns 0 with san_list set when a TLS
+# endpoint answered, 1 when nothing answered. An endpoint that answers
+# but presents an unparseable certificate is treated as fatal, not as
+# silence: silence is the only evidence that may lead to genesis.
+probe_cluster() {
+    _pem="$(curl -ksS --connect-timeout 4 --max-time 8 \
+        -o /dev/null -w '%{certs}' "https://${vip}:6443/" 2> /dev/null)" || return 1
+    [ -n "${_pem}" ] || return 1
+
+    # First certificate in the chain is the serving certificate.
+    san_list="$(printf '%s\n' "${_pem}" \
+        | sed -n '/-----BEGIN CERTIFICATE-----/,/-----END CERTIFICATE-----/p
+                  /-----END CERTIFICATE-----/q' \
+        | openssl x509 -noout -ext subjectAltName 2> /dev/null)" \
+        || fail "endpoint at ${vip}:6443 answered but its certificate is unreadable"
+    return 0
+}
+
+vip_re="$(printf '%s' "${vip}" | sed 's/\./\\./g')"
+dns_re="$(printf '%s' "${dns_name}" | sed 's/\./\\./g')"
+
+attempts="${DISCOVERY_ATTEMPTS:-6}"
+attempt=1
+role_fragment=""
+while [ "${attempt}" -le "${attempts}" ]; do
+    if probe_cluster; then
+        echo "${san_list}" | grep -Eq "IP Address:${vip_re}(,|\$)" \
+            || fail "cluster at ${vip}:6443 lacks IP SAN ${vip} — refusing to join or initialise. SANs: ${san_list}"
+        echo "${san_list}" | grep -Eq "DNS:${dns_re}(,|\$)" \
+            || fail "cluster at ${vip}:6443 lacks DNS SAN ${dns_name} — refusing to join or initialise. SANs: ${san_list}"
+        echo "dispatch: join — certificate SANs matched on attempt ${attempt}/${attempts}"
+        role_fragment="configs/roles/10-server-join.yaml"
+        mv "${join_file}" "${oem_dir}/$(basename "${join_fragment}")"
+        break
+    fi
+    echo "dispatch: no cluster answer on attempt ${attempt}/${attempts}"
+    attempt=$((attempt + 1))
+    [ "${attempt}" -le "${attempts}" ] && sleep 5
+done
+
+if [ -z "${role_fragment}" ]; then
+    echo "dispatch: genesis — no cluster answered after ${attempts} attempts, initialising a new cluster"
+    role_fragment="configs/roles/10-server-init.yaml"
+    rm -f "${join_file}"
+fi
+
+echo "dispatch: fetching ${role_fragment}"
+fetch "${CONFIG_BASE_URL}/${role_fragment}" "${oem_dir}/$(basename "${role_fragment}")" \
+    || fail "failed to fetch ${role_fragment}"
+# --- end bootstrap role discovery --------------------------------------
 
 # Inject the cluster token: fetch the encrypted secret, decrypt it with the
 # cluster age key from the overlay, stage it as the last fragment.
