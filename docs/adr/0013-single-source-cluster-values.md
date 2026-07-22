@@ -42,14 +42,19 @@ Option 3.
     dns: "k8s-prod.home.fam-melcher.net"
   ```
 
-- The magic lives elsewhere. The installer's dispatcher converts every
-  scalar entry under `values:` generically to `KEY=VALUE` (dash →
-  underscore, uppercased, quotes stripped) and stages a *generated*
-  cloud-config fragment that ships them to the installed system as
+- The magic lives elsewhere. `11-cluster.yaml` is real YAML, so it is read
+  with a real YAML tool — **yq** (mikefarah/yq), bundled in the ISO
+  overlay next to sops (same checksum-verified download pattern in
+  `build-iso.sh`; hadron ships neither). The dispatcher runs one yq
+  expression converting every scalar entry under `values:` generically to
+  `KEY=VALUE` (dash → underscore, uppercased) and stages a *generated*
+  cloud-config fragment shipping them to the installed system as
   `/etc/kairos-cluster/cluster.env` — the same pattern as the generated
   token fragment (ADR 0008). Future scalar values need no dispatcher
-  change; lists and nested maps are added to the converter when a
-  consumer needs them.
+  change; lists and nested maps are skipped by the yq filter until a
+  consumer needs one. `scripts/validate-nodes.sh` reads the same file with
+  plain `yq eval '.values.vip'` queries — no fragment anywhere is read
+  with sed/awk text-matching once it is real YAML.
 - Consumers are value-free and therefore cluster-neutral, shared in
   `configs/cluster/`, all rendering at boot stage from `cluster.env`:
   - `12-tls-san.yaml` renders the tls-san drop-in (`${VIP}`, `${DNS}`);
@@ -67,10 +72,10 @@ Option 3.
   dir and `configs/cluster/`, sorted by numeric prefix, + the node
   fragment. `templates/fragments.list.tmpl` is gone; new cluster
   fragments join future node lists automatically.
-- The dispatcher's discovery (ADR 0011) reads `VIP=`/`DNS=` from the
-  generated fragment; the validator reads `vip:`/`dns:` from the values
-  file and additionally requires every node list to contain its cluster's
-  values fragment.
+- The dispatcher's discovery (ADR 0011) captures `vip`/`dns` directly via
+  yq while converting the values file — no second read of the generated
+  fragment; the validator additionally requires every node list to
+  contain its cluster's values fragment.
 - This is not a repository templating engine: the repo stays literal, and
   rendering happens on the node from values the node was shipped —
   ADR 0004's decision stands. Amends ADR 0012 (the per-cluster config dir
@@ -88,8 +93,15 @@ Option 3.
 - Installed nodes are unaffected until reinstall: paths and rendered
   contents are identical to the previous static files.
 
+- One more bundled binary in the ISO overlay (yq, checksum-verified like
+  sops) and a new engineer-machine dependency for `validate-nodes.sh`.
+
 ## Rationale
 
 Values once, consumers shared, rendering where the values are needed —
 the smallest arrangement in which nothing can drift, bought with runtime
 indirection instead of a repo templating engine that ADR 0004 rejects.
+Reading real YAML with a real YAML tool instead of sed/awk regexes is the
+same principle applied to the tooling: text-pattern matching against a
+structured format is fragile in exactly the way `values:` is meant to
+prevent.

@@ -26,6 +26,11 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+command -v yq > /dev/null 2>&1 || {
+    echo "validate-nodes: FATAL: yq not found (https://github.com/mikefarah/yq)" >&2
+    exit 1
+}
+
 marker="BOOTSTRAP-ROLE"
 known_bootstrap_names=("10-server-init.yaml" "10-server-join.yaml" "13-join.yaml")
 
@@ -83,12 +88,12 @@ for cluster_dir in "${repo_root}"/clusters/*/; do
         continue
     fi
 
-    vip="$(sed -n 's/^  vip: *"\{0,1\}\([0-9.][0-9.]*\)"\{0,1\}$/\1/p' "${cluster_yaml}" | head -1)"
+    vip="$(yq eval '.values.vip // ""' "${cluster_yaml}")"
     if [[ -z "${vip}" ]]; then
         violation "clusters/${cluster}: no vip value in config/11-cluster.yaml"
     fi
 
-    dns_name="$(sed -n 's/^  dns: *"\{0,1\}\([a-z0-9.-][a-z0-9.-]*\)"\{0,1\}$/\1/p' "${cluster_yaml}" | head -1)"
+    dns_name="$(yq eval '.values.dns // ""' "${cluster_yaml}")"
     if [[ -z "${dns_name}" ]]; then
         violation "clusters/${cluster}: no dns value in config/11-cluster.yaml"
     elif [[ "${dns_name%%.*}" != "${cluster}" ]]; then

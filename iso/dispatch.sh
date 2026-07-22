@@ -24,9 +24,10 @@ fail() {
 }
 
 # hadron ships curl and openssl in the live system (verified against the
-# image contents); only sops is bundled in the overlay.
+# image contents); sops and yq are bundled in the overlay.
 command -v curl > /dev/null 2>&1 || fail "curl not found in live system"
 command -v openssl > /dev/null 2>&1 || fail "openssl not found in live system"
+[ -x "${script_dir}/yq" ] || fail "yq not found in overlay"
 
 # probe <url> <output-file> — single silent attempt, used while polling for
 # a configuration that may not exist yet (a 404 is expected, not an error).
@@ -129,21 +130,29 @@ done
 
 mkdir -p "${oem_dir}"
 
+yq="${script_dir}/yq"
+
 # stage_cluster_values <values-yaml> — the cluster's 11-cluster.yaml is
-# pure data (ADR 0013). Convert every scalar entry under values: to
-# KEY=VALUE (dash → underscore, uppercased, quotes stripped) and stage a
-# generated cloud-config fragment that ships them to the installed system
-# as /etc/kairos-cluster/cluster.env. Lists and nested maps are not
-# converted (extend here when a consumer needs them).
+# pure data (ADR 0013): a `values:` map, read with yq instead of ad-hoc
+# text parsing. Every scalar entry becomes KEY=VALUE (dash -> underscore,
+# uppercased) in a generated cloud-config fragment shipping
+# /etc/kairos-cluster/cluster.env to the installed system. Lists and
+# nested maps are skipped (extend the yq filter here when a consumer
+# needs one). vip/dns_name are captured directly for the discovery step
+# below — no re-parsing of our own generated output.
 stage_cluster_values() {
-    _env="$(sed -n 's/^  \([A-Za-z0-9-][A-Za-z0-9-]*\): *\(..*\)$/\1=\2/p' "${1}" \
-        | while IFS= read -r _kv; do
-            _key="$(printf '%s' "${_kv%%=*}" | tr 'a-z-' 'A-Z_')"
-            _val="${_kv#*=}"
-            _val="${_val#\"}"
-            _val="${_val%\"}"
-            printf '%s=%s\n' "${_key}" "${_val}"
-        done)"
+    vip="$("${yq}" eval '.values.vip // ""' "${1}")"
+    dns_name="$("${yq}" eval '.values.dns // ""' "${1}")"
+    [ -n "${vip}" ] || fail "no values.vip in the cluster's 11-cluster.yaml"
+    [ -n "${dns_name}" ] || fail "no values.dns in the cluster's 11-cluster.yaml"
+
+    _env="$("${yq}" eval '
+        .values
+        | to_entries
+        | map(select(.value | (tag == "!!str" or tag == "!!int" or tag == "!!bool" or tag == "!!float")))
+        | map((.key | sub("-", "_") | upcase) + "=" + (.value | tostring))
+        | .[]
+    ' "${1}")"
     [ -n "${_env}" ] || fail "no scalar values found under values: in 11-cluster.yaml"
 
     cat > "${oem_dir}/11-cluster.yaml" <<EOF
@@ -165,6 +174,9 @@ EOF
     echo "dispatch: staged cluster values ($(printf '%s' "${_env}" | tr '\n' ' '))"
 }
 
+vip=""
+dns_name=""
+
 while IFS= read -r fragment; do
     [ -n "${fragment}" ] || continue
     echo "dispatch: fetching ${fragment}"
@@ -180,6 +192,8 @@ while IFS= read -r fragment; do
         || fail "failed to fetch ${fragment}"
 done < "${list_file}"
 rm -f "${list_file}"
+
+[ -n "${vip}" ] || fail "11-cluster.yaml not staged — fragments.list must list the cluster values fragment"
 
 # --- Bootstrap role discovery (ADR 0011) -------------------------------
 #
@@ -201,15 +215,6 @@ join_fragment="configs/cluster/13-join.yaml"
 join_file="$(mktemp)"
 fetch "${CONFIG_BASE_URL}/${join_fragment}" "${join_file}" \
     || fail "failed to fetch ${join_fragment}"
-
-vars_file="${oem_dir}/11-cluster.yaml"
-[ -r "${vars_file}" ] || fail "11-cluster.yaml not staged — fragments.list must list the cluster values fragment"
-
-vip="$(sed -n 's/^ *VIP=\([0-9.][0-9.]*\)$/\1/p' "${vars_file}" | head -1)"
-[ -n "${vip}" ] || fail "no vip value in the cluster's 11-cluster.yaml"
-
-dns_name="$(sed -n 's/^ *DNS=\([a-z0-9.-][a-z0-9.-]*\)$/\1/p' "${vars_file}" | head -1)"
-[ -n "${dns_name}" ] || fail "no dns value in the cluster's 11-cluster.yaml"
 
 echo "dispatch: probing for existing cluster at https://${vip}:6443 (expecting DNS SAN ${dns_name})"
 

@@ -15,8 +15,9 @@
 #   - an ISO overlay with dispatch.sh, dispatch.env, a static sops binary
 #     and the cluster's age key
 #
-# Only tools missing from the hadron image are bundled (verified against
-# the image contents): curl ships with hadron, sops does not.
+# Only tools missing from the hadron image are bundled: curl ships with
+# hadron, sops and yq do not. yq (mikefarah/yq) does the dispatcher's YAML
+# reading — 11-cluster.yaml is data, not something to parse with sed.
 #
 # WARNING: the resulting ISO embeds the private cluster age key. Treat the
 # image as secret material (ADR 0008).
@@ -39,6 +40,7 @@
 #   SOPS_VERSION      sops release to bundle (default: latest — resolved at
 #                     build time so fixes arrive automatically; pin for
 #                     reproducible builds)
+#   YQ_VERSION        yq release to bundle (default: latest, same tradeoff)
 
 set -euo pipefail
 
@@ -96,6 +98,7 @@ KAIROS_IMAGE="${KAIROS_IMAGE:-quay.io/kairos/hadron:${HADRON_VERSION}-standard-$
 AURORABOOT_IMAGE="${AURORABOOT_IMAGE:-quay.io/kairos/auroraboot:v0.25.2}"
 AGE_KEY_FILE="${AGE_KEY_FILE:-${repo_root}/.keys/${cluster}.agekey}"
 SOPS_VERSION="${SOPS_VERSION:-latest}"
+YQ_VERSION="${YQ_VERSION:-latest}"
 
 iso_name="kairos-${KAIROS_VERSION}-${ARCH}-${K8S_DISTRO}-${branch}-${cluster}.iso"
 config_repo_url="https://raw.githubusercontent.com/fam-melcher/kairos-configs"
@@ -157,10 +160,46 @@ expected="$(echo "${checksums}" | grep " ${sops_asset}\$" | awk '{print $1}')"
 actual="$(shasum -a 256 "${build_dir}/${sops_asset}" | awk '{print $1}')"
 [[ "${actual}" == "${expected}" ]] || fail "checksum mismatch for ${sops_asset}"
 
+# --- Static yq binary (cached in build/, checksum-verified) -------------------
+
+if [[ "${YQ_VERSION}" == "latest" ]]; then
+    YQ_VERSION="$(curl -fsSL https://api.github.com/repos/mikefarah/yq/releases/latest \
+        | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p')"
+    [[ -n "${YQ_VERSION}" ]] || fail "could not resolve latest yq release"
+fi
+echo "build-iso: bundling yq ${YQ_VERSION}"
+
+yq_asset="yq_linux_${ARCH}"
+yq_url="https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}"
+
+if [[ ! -f "${build_dir}/${yq_asset}-${YQ_VERSION}" ]]; then
+    echo "build-iso: downloading ${yq_asset}"
+    curl -fsSL "${yq_url}/${yq_asset}" -o "${build_dir}/${yq_asset}-${YQ_VERSION}"
+fi
+
+# yq's checksums file lists many hash algorithms per asset in a fixed but
+# undocumented-inline order; checksums_hashes_order names that order.
+# Locate the SHA-256 column the same way yq's own extract-checksum.sh does
+# instead of hardcoding a column number that could shift between releases.
+yq_hash_order="$(curl -fsSL "${yq_url}/checksums_hashes_order")"
+[[ -n "${yq_hash_order}" ]] || fail "could not fetch yq checksums_hashes_order"
+sha256_line="$(printf '%s\n' "${yq_hash_order}" | grep -n -m1 '^SHA-256$' | cut -d: -f1)"
+[[ -n "${sha256_line}" ]] || fail "SHA-256 not found in yq checksums_hashes_order"
+yq_checksum_col=$((sha256_line + 1))
+
+yq_checksums="$(curl -fsSL "${yq_url}/checksums")"
+expected="$(printf '%s\n' "${yq_checksums}" | grep -m1 "^${yq_asset}[[:space:]]" \
+    | sed 's/  */\t/g' | cut -f"${yq_checksum_col}")"
+[[ -n "${expected}" ]] || fail "no SHA-256 for ${yq_asset} in yq checksums"
+
+actual="$(shasum -a 256 "${build_dir}/${yq_asset}-${YQ_VERSION}" | awk '{print $1}')"
+[[ "${actual}" == "${expected}" ]] || fail "checksum mismatch for ${yq_asset}"
+
 # --- Assemble overlays and cloud-config ---------------------------------------
 
 install -m 0755 "${repo_root}/iso/dispatch.sh" "${overlay_dir}/dispatch.sh"
 install -m 0755 "${build_dir}/${sops_asset}" "${overlay_dir}/sops"
+install -m 0755 "${build_dir}/${yq_asset}-${YQ_VERSION}" "${overlay_dir}/yq"
 install -m 0600 "${AGE_KEY_FILE}" "${overlay_dir}/cluster.agekey"
 
 cat > "${overlay_dir}/dispatch.env" <<EOF

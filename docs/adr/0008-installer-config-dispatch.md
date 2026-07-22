@@ -60,8 +60,11 @@ Generic ISO with self-dispatch (option 4):
   known (missing fragments, token errors) abort loudly and leave the
   machine in the live system. Logs to the console and `/tmp/dispatch.log`.
   Uses the system curl (hadron ships it — verified against the image
-  contents; only sops is missing and therefore bundled, resolved to the
-  latest release at build time).
+  contents; sops and yq are missing and therefore bundled, resolved to
+  the latest release at build time). (Amended 2026-07-22: yq
+  (mikefarah/yq) added to the overlay so the dispatcher reads YAML
+  values with a YAML tool instead of text patterns — see
+  [ADR 0013](0013-single-source-cluster-values.md).)
 - `nodes/<id>/fragments.list` — explicit, ordered fragment list per node,
   containing permanent node configuration only. The bootstrap role (init
   vs. join) is not part of the list; the dispatcher selects and fetches it
