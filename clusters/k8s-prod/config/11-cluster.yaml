@@ -1,0 +1,9 @@
+# Cluster Values — the SINGLE place this cluster's values are defined
+# (ADR 0013). Pure data: no stages, no rendering. The installer's
+# dispatcher converts every scalar key to KEY=VALUE in
+# /etc/kairos-cluster/cluster.env (dash → underscore, uppercased); the
+# shared renderers in configs/cluster/ consume it from there.
+
+values:
+  vip: "192.168.30.2"
+  dns: "k8s-prod.home.fam-melcher.net"

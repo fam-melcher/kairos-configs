@@ -1,6 +1,6 @@
 # 0009 — Branch and environment strategy
 
-- Status: Accepted
+- Status: Superseded by [0012](0012-cluster-directories-branch-stages.md)
 - Date: 2026-07-19
 
 ## Context

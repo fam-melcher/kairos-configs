@@ -57,7 +57,9 @@ Option 4. The repository invariant:
   failover, which completes in seconds). Probe parameters are parsed from
   the fetched fragments — the VIP from the join target in `13-join.yaml`,
   the expected DNS name from the `tls-san` list in `12-cluster.yaml` — so
-  no value exists twice.
+  no value exists twice. (Amended 2026-07-22: these fragments now live at
+  `clusters/<cluster>/config/` —
+  [ADR 0012](0012-cluster-directories-branch-stages.md).)
 - Three outcomes:
   - **Answer, certificate contains the VIP as IP SAN and the cluster DNS
     name (`k8s-prod.home.fam-melcher.net`) as DNS SAN** → join: stage

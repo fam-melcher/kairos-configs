@@ -20,8 +20,8 @@ key.txt
 # No exceptions below this line — nothing in .keys/ is ever tracked.
 .keys/
 
-# secrets/ only allows encrypted SOPS files and documentation
-secrets/**
-!secrets/**/
-!secrets/README.md
-!secrets/**/*.sops.yaml
+# cluster secrets dirs only allow encrypted SOPS files and documentation
+clusters/*/secrets/**
+!clusters/*/secrets/
+!clusters/*/secrets/README.md
+!clusters/*/secrets/*.sops.yaml

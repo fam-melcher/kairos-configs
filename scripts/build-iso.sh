@@ -1,29 +1,33 @@
 #!/usr/bin/env bash
 #
-# build-iso.sh — build the generic installer ISO for one environment.
+# build-iso.sh — build the generic installer ISO for one cluster.
 #
-# The environment is derived from the branch (ADR 0009):
-#   dev-vm-cluster -> dev   (nodes fetch their config from dev-vm-cluster)
-#   main           -> prod  (nodes fetch their config from main)
+# Branches are stages, directories are environments (ADR 0012):
+#   main  -> live configuration; the target cluster must be given explicitly
+#   dev   -> staging; defaults to the k8s-dev cluster, any cluster overridable
+#            (e.g. `build-iso.sh dev k8s-prod` tests prod config before merge)
 # Builds from any other branch are refused: an ISO must never point at a
 # branch that disappears after a merge.
 #
-# Produces build/iso/kairos-<version>-<arch>-<distro>-<env>.iso containing:
+# Produces build/iso/kairos-<version>-<arch>-<distro>-<branch>-<cluster>.iso:
 #   - iso/bootstrap.yaml as the baked cloud-config
 #   - a rootfs overlay with the dispatch trigger (/system/oem)
 #   - an ISO overlay with dispatch.sh, dispatch.env, a static sops binary
-#     and the environment's cluster age key
+#     and the cluster's age key
 #
-# Only tools missing from the hadron image are bundled (verified against
-# the image contents): curl ships with hadron, sops does not.
+# Only tools missing from the hadron image are bundled: curl ships with
+# hadron, sops and yq do not. yq (mikefarah/yq) does the dispatcher's YAML
+# reading — 11-cluster.yaml is data, not something to parse with sed.
 #
-# WARNING: the resulting ISO embeds the private cluster age key of its
-# environment. Treat the image as secret material (ADR 0008).
+# WARNING: the resulting ISO embeds the private cluster age key. Treat the
+# image as secret material (ADR 0008).
 #
 # Usage:
-#   scripts/build-iso.sh [branch]
+#   scripts/build-iso.sh <branch> [cluster]
 #
-#   branch  dev-vm-cluster or main (default: currently checked-out branch)
+#   branch   main or dev
+#   cluster  name of a clusters/<name>/ directory; required for main,
+#            defaults to k8s-dev for dev
 #
 # Environment overrides:
 #   ARCH              target architecture: amd64 or arm64 (default: amd64)
@@ -32,10 +36,11 @@
 #   HADRON_VERSION    hadron flavor release
 #   KAIROS_IMAGE      full image override (skips construction from the above)
 #   AURORABOOT_IMAGE  AuroraBoot builder image
-#   AGE_KEY_FILE      cluster age key (default: .keys/homelab-<env>-cluster.agekey)
+#   AGE_KEY_FILE      cluster age key (default: .keys/<cluster>.agekey)
 #   SOPS_VERSION      sops release to bundle (default: latest — resolved at
 #                     build time so fixes arrive automatically; pin for
 #                     reproducible builds)
+#   YQ_VERSION        yq release to bundle (default: latest, same tradeoff)
 
 set -euo pipefail
 
@@ -46,15 +51,33 @@ fail() {
     exit 1
 }
 
-# --- Environment from branch --------------------------------------------------
+# --- Branch (stage) and cluster (environment), ADR 0012 -----------------------
 
-branch="${1:-$(git -C "${repo_root}" rev-parse --abbrev-ref HEAD)}"
+[[ $# -ge 1 ]] || fail "usage: build-iso.sh <branch> [cluster]"
+
+branch="${1}"
+cluster="${2:-}"
 
 case "${branch}" in
-    dev-vm-cluster) env="dev" ;;
-    main) env="prod" ;;
-    *) fail "ISO builds are only supported from dev-vm-cluster or main (got '${branch}')" ;;
+    main)
+        [[ -n "${cluster}" ]] \
+            || fail "main builds require an explicit cluster (usage: build-iso.sh main <cluster>)"
+        ;;
+    dev)
+        cluster="${cluster:-k8s-dev}"
+        ;;
+    *) fail "ISO builds are only supported from main or dev (got '${branch}')" ;;
 esac
+
+available_clusters() {
+    local dir
+    for dir in "${repo_root}/clusters"/*/; do
+        [[ -d "${dir}" ]] && printf '%s ' "$(basename "${dir}")"
+    done
+}
+
+[[ -d "${repo_root}/clusters/${cluster}" ]] \
+    || fail "unknown cluster '${cluster}' — available: $(available_clusters)"
 
 # --- Versions (single source for image tag and ISO name) ----------------------
 
@@ -73,10 +96,11 @@ HADRON_VERSION="${HADRON_VERSION:-v0.4.0}"
 # flavor repositories are no longer updated by the release pipeline.
 KAIROS_IMAGE="${KAIROS_IMAGE:-quay.io/kairos/hadron:${HADRON_VERSION}-standard-${ARCH}-generic-v${KAIROS_VERSION}-${K8S_DISTRO}-${K8S_VERSION}}"
 AURORABOOT_IMAGE="${AURORABOOT_IMAGE:-quay.io/kairos/auroraboot:v0.25.2}"
-AGE_KEY_FILE="${AGE_KEY_FILE:-${repo_root}/.keys/homelab-${env}-cluster.agekey}"
+AGE_KEY_FILE="${AGE_KEY_FILE:-${repo_root}/.keys/${cluster}.agekey}"
 SOPS_VERSION="${SOPS_VERSION:-latest}"
+YQ_VERSION="${YQ_VERSION:-latest}"
 
-iso_name="kairos-${KAIROS_VERSION}-${ARCH}-${K8S_DISTRO}-${env}.iso"
+iso_name="kairos-${KAIROS_VERSION}-${ARCH}-${K8S_DISTRO}-${branch}-${cluster}.iso"
 config_repo_url="https://raw.githubusercontent.com/fam-melcher/kairos-configs"
 
 # --- Preconditions ------------------------------------------------------------
@@ -112,10 +136,12 @@ mkdir -p "${overlay_dir}"
 
 # --- Static sops binary (cached in build/, checksum-verified) -----------------
 
+command -v yq > /dev/null 2>&1 || fail "yq not found (needed on the build machine — https://github.com/mikefarah/yq)"
+
 if [[ "${SOPS_VERSION}" == "latest" ]]; then
     SOPS_VERSION="$(curl -fsSL https://api.github.com/repos/getsops/sops/releases/latest \
-        | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p')"
-    [[ -n "${SOPS_VERSION}" ]] || fail "could not resolve latest sops release"
+        | yq eval '.tag_name' -)"
+    [[ -n "${SOPS_VERSION}" && "${SOPS_VERSION}" != "null" ]] || fail "could not resolve latest sops release"
 fi
 echo "build-iso: bundling sops ${SOPS_VERSION}"
 
@@ -136,14 +162,51 @@ expected="$(echo "${checksums}" | grep " ${sops_asset}\$" | awk '{print $1}')"
 actual="$(shasum -a 256 "${build_dir}/${sops_asset}" | awk '{print $1}')"
 [[ "${actual}" == "${expected}" ]] || fail "checksum mismatch for ${sops_asset}"
 
+# --- Static yq binary (cached in build/, checksum-verified) -------------------
+
+if [[ "${YQ_VERSION}" == "latest" ]]; then
+    YQ_VERSION="$(curl -fsSL https://api.github.com/repos/mikefarah/yq/releases/latest \
+        | yq eval '.tag_name' -)"
+    [[ -n "${YQ_VERSION}" && "${YQ_VERSION}" != "null" ]] || fail "could not resolve latest yq release"
+fi
+echo "build-iso: bundling yq ${YQ_VERSION}"
+
+yq_asset="yq_linux_${ARCH}"
+yq_url="https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}"
+
+if [[ ! -f "${build_dir}/${yq_asset}-${YQ_VERSION}" ]]; then
+    echo "build-iso: downloading ${yq_asset}"
+    curl -fsSL "${yq_url}/${yq_asset}" -o "${build_dir}/${yq_asset}-${YQ_VERSION}"
+fi
+
+# yq's checksums file lists many hash algorithms per asset in a fixed but
+# undocumented-inline order; checksums_hashes_order names that order.
+# Locate the SHA-256 column the same way yq's own extract-checksum.sh does
+# instead of hardcoding a column number that could shift between releases.
+yq_hash_order="$(curl -fsSL "${yq_url}/checksums_hashes_order")"
+[[ -n "${yq_hash_order}" ]] || fail "could not fetch yq checksums_hashes_order"
+sha256_line="$(printf '%s\n' "${yq_hash_order}" | grep -n -m1 '^SHA-256$' | cut -d: -f1)"
+[[ -n "${sha256_line}" ]] || fail "SHA-256 not found in yq checksums_hashes_order"
+yq_checksum_col=$((sha256_line + 1))
+
+yq_checksums="$(curl -fsSL "${yq_url}/checksums")"
+expected="$(printf '%s\n' "${yq_checksums}" | grep -m1 "^${yq_asset}[[:space:]]" \
+    | sed 's/  */\t/g' | cut -f"${yq_checksum_col}")"
+[[ -n "${expected}" ]] || fail "no SHA-256 for ${yq_asset} in yq checksums"
+
+actual="$(shasum -a 256 "${build_dir}/${yq_asset}-${YQ_VERSION}" | awk '{print $1}')"
+[[ "${actual}" == "${expected}" ]] || fail "checksum mismatch for ${yq_asset}"
+
 # --- Assemble overlays and cloud-config ---------------------------------------
 
 install -m 0755 "${repo_root}/iso/dispatch.sh" "${overlay_dir}/dispatch.sh"
 install -m 0755 "${build_dir}/${sops_asset}" "${overlay_dir}/sops"
+install -m 0755 "${build_dir}/${yq_asset}-${YQ_VERSION}" "${overlay_dir}/yq"
 install -m 0600 "${AGE_KEY_FILE}" "${overlay_dir}/cluster.agekey"
 
 cat > "${overlay_dir}/dispatch.env" <<EOF
 CONFIG_BASE_URL="${config_repo_url}/${branch}"
+CLUSTER="${cluster}"
 EOF
 
 cp "${repo_root}/iso/bootstrap.yaml" "${build_dir}/bootstrap.yaml"
@@ -161,7 +224,7 @@ cp "${repo_root}/iso/91-dispatch.yaml" "${build_dir}/rootfs-overlay/system/oem/9
 state_volume="kairos-iso-state"
 
 echo "build-iso: image=${KAIROS_IMAGE}"
-echo "build-iso: env=${env} (config branch: ${branch})"
+echo "build-iso: cluster=${cluster} (config branch: ${branch})"
 echo "build-iso: output=${iso_name}"
 
 "${engine}" volume rm -f "${state_volume}" > /dev/null 2>&1 || true
@@ -191,4 +254,4 @@ mkdir -p "${build_dir}/iso"
 
 echo
 echo "build-iso: done — ${build_dir}/iso/${iso_name}"
-echo "build-iso: WARNING: the ISO contains the private ${env} cluster age key."
+echo "build-iso: WARNING: the ISO contains the private ${cluster} cluster age key."

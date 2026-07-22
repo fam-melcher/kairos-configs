@@ -49,46 +49,30 @@ ensure_file() {
 # --- Directory skeleton ------------------------------------------------------
 
 ensure_dir "configs/base"
+ensure_dir "configs/cluster"
 ensure_dir "configs/roles"
-ensure_dir "nodes"
-ensure_dir "templates"
-ensure_dir "secrets"
+ensure_dir "clusters"
+ensure_dir "templates/cluster"
 ensure_dir "scripts"
 ensure_dir "docs/adr"
 
 # --- Placeholder files -------------------------------------------------------
 
-ensure_file "nodes/README.md" <<'EOF'
-# Nodes
+ensure_file "clusters/README.md" <<'EOF'
+# Clusters
 
-One directory per node, named exactly like the node's hostname. Each
-directory contains the node-specific cloud-config fragment `20-<hostname>.yaml`.
+One directory per cluster (ADR 0012), named after the first segment of the
+cluster's DNS name: `clusters/<name>/{config,nodes,secrets}`. Create new
+clusters with `scripts/add-cluster.sh <dns-name> <vip>` — it scaffolds the
+directories, renders the config fragments, generates the age key, appends
+the sops rule, and writes a fresh encrypted k3s token.
 
-Adding a node:
+Secrets: only SOPS-encrypted files (`*.sops.yaml`) may exist under
+`clusters/<name>/secrets/`; `.gitignore` blocks everything else. Never
+commit plaintext secret material (docs/adr/0005-secret-management.md).
 
-1. `mkdir nodes/<hostname>`
-2. Copy `templates/20-node.yaml.tmpl` to `nodes/<hostname>/20-<hostname>.yaml`
-3. Replace every `@VARIABLE@` placeholder; no placeholder may remain.
-4. Open a pull request.
-
-The node's full configuration is the ordered set of its permanent
-fragments (`configs/base/00-base.yaml`, environment fragments,
-`nodes/<hostname>/20-<hostname>.yaml`; see docs/adr/0004) plus the
-bootstrap role selected by the installer at install time (docs/adr/0011).
-Bootstrap roles must never appear in a node's fragment set.
-EOF
-
-ensure_file "secrets/README.md" <<'EOF'
-# Secrets
-
-Only SOPS-encrypted files (`*.sops.yaml`) may exist here; `.gitignore`
-blocks everything else. Never commit plaintext secret material.
-
-- Encrypt: `sops -e -i secrets/<name>.sops.yaml`
-- Decrypt (to stdout only): `sops -d secrets/<name>.sops.yaml`
-- Recipient changes: edit `.sops.yaml`, then `sops updatekeys secrets/*.sops.yaml`
-
-Strategy and key handling: docs/adr/0005-secret-management.md.
+Nodes live under `clusters/<name>/nodes/`; add them with
+`scripts/add-node.sh <cluster> <uuid>` (see the per-node README).
 EOF
 
 ensure_file "templates/20-node.yaml.tmpl" <<'EOF'

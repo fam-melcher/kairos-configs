@@ -3,13 +3,15 @@
 # add-node.sh — scaffold the repository files for a new node.
 #
 # Usage:
-#   scripts/add-node.sh <uuid-or-node-id> [install-device]
+#   scripts/add-node.sh <cluster> <uuid-or-node-id> [install-device]
 #
+#   cluster          name of a clusters/<name>/ directory (e.g. k8s-prod)
 #   uuid-or-node-id  full product UUID, its first segment, or node-<id>
 #   install-device   target disk (default: /dev/sda)
 #
-# Creates nodes/node-<id>/ with the node fragment and fragments.list from
-# the templates. Refuses to overwrite an existing node directory.
+# Creates clusters/<cluster>/nodes/node-<id>/ with the node fragment and
+# fragments.list from the templates. Refuses to overwrite an existing node
+# directory; refuses unknown clusters (create those with add-cluster.sh).
 #
 # There is no role argument: whether a node joins the cluster or
 # initialises a new one is decided by the installer at install time
@@ -24,10 +26,21 @@ fail() {
     exit 1
 }
 
-[[ $# -ge 1 ]] || fail "usage: add-node.sh <uuid-or-node-id> [install-device]"
+available_clusters() {
+    local dir
+    for dir in "${repo_root}/clusters"/*/; do
+        [[ -d "${dir}" ]] && printf '%s ' "$(basename "${dir}")"
+    done
+}
 
-raw="${1}"
-device="${2:-/dev/sda}"
+[[ $# -ge 2 ]] || fail "usage: add-node.sh <cluster> <uuid-or-node-id> [install-device] — available clusters: $(available_clusters)"
+
+cluster="${1}"
+raw="${2}"
+device="${3:-/dev/sda}"
+
+[[ -d "${repo_root}/clusters/${cluster}" ]] \
+    || fail "unknown cluster '${cluster}' — available: $(available_clusters); create one with scripts/add-cluster.sh"
 
 # Normalize the install device: accept bare names like "sda" or "nvme0n1".
 [[ "${device}" == /dev/* ]] || device="/dev/${device}"
@@ -56,7 +69,7 @@ elif [[ "${normalized}" =~ ^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$ ]]; then
 else
     fail "'${raw}' is neither a full product UUID nor an 8-hex node id"
 fi
-node_dir="${repo_root}/nodes/${node_id}"
+node_dir="${repo_root}/clusters/${cluster}/nodes/${node_id}"
 
 [[ ! -e "${node_dir}" ]] || fail "${node_dir} already exists"
 
@@ -66,8 +79,20 @@ sed -e "s|@NODE_HOSTNAME@|${node_id}|g" \
     -e "s|@NODE_INSTALL_DEVICE@|${device}|g" \
     "${repo_root}/templates/20-node.yaml.tmpl" > "${node_dir}/20-${node_id}.yaml"
 
-sed -e "s|@NODE_ID@|${node_id}|g" \
-    "${repo_root}/templates/fragments.list.tmpl" > "${node_dir}/fragments.list"
+# Compose the fragment list instead of instantiating a template: base +
+# every non-bootstrap fragment from the cluster's config dir and the
+# shared cluster dir (ordered by numeric basename prefix) + the node
+# fragment. New cluster fragments join future node lists automatically.
+{
+    echo "configs/base/00-base.yaml"
+    for f in "${repo_root}/clusters/${cluster}/config/"*.yaml \
+        "${repo_root}/configs/cluster/"*.yaml; do
+        [[ -f "${f}" ]] || continue
+        grep -q 'BOOTSTRAP-ROLE' "${f}" && continue
+        printf '%s\t%s\n' "$(basename "${f}")" "${f#"${repo_root}/"}"
+    done | sort | cut -f2
+    echo "clusters/${cluster}/nodes/${node_id}/20-${node_id}.yaml"
+} > "${node_dir}/fragments.list"
 
-echo "add-node: created ${node_dir} (device: ${device})"
+echo "add-node: created ${node_dir} (cluster: ${cluster}, device: ${device})"
 echo "add-node: review the network section in 20-${node_id}.yaml, then commit and push."

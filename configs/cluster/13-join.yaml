@@ -1,0 +1,21 @@
+#cloud-config
+# BOOTSTRAP-ROLE: installer-selected (ADR 0011) — never reference from fragments.list
+#
+# Join target for servers joining the existing cluster. Value-free and
+# shared by all clusters (ADR 0013): the server URL renders at boot from
+# /etc/kairos-cluster/cluster.env (written in initramfs by the cluster's
+# 11-cluster.yaml — the boot stage runs strictly afterwards). Fetched by
+# the installer's dispatcher together with 10-server-join.yaml (ADR 0011)
+# — a cluster-init node must not carry a server entry, so this file must
+# never appear in a fragments.list. Renders idempotently on every boot.
+
+stages:
+  boot:
+    - name: "Render K3s join target"
+      commands:
+        - |
+          . /etc/kairos-cluster/cluster.env
+          umask 077
+          mkdir -p /etc/rancher/k3s/config.yaml.d
+          printf 'server: https://%s:6443\n' "${VIP}" \
+              > /etc/rancher/k3s/config.yaml.d/20-join.yaml

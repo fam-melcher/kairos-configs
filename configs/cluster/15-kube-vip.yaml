@@ -1,6 +1,10 @@
 #cloud-config
-# Environment fragment — BRANCH-SPECIFIC (ADR 0009): kube-vip in ARP mode providing the control plane VIP
-# 192.168.30.2 (ADR 0006). Deployed via the K3s auto-deploy manifest
+# Value-free and shared by all clusters (ADR 0013): the manifest is staged
+# as a template with a literal @VIP@ token; the VIP renders at boot from
+# /etc/kairos-cluster/cluster.env (written in initramfs by the cluster's
+# 11-cluster.yaml — the boot stage runs strictly afterwards).
+# kube-vip in ARP mode providing the control plane VIP
+# @VIP@ (ADR 0006). Deployed via the K3s auto-deploy manifest
 # directory; K3s applies it without manual kubectl steps.
 #
 # Deliberately not using the native Kairos `kubevip:` block: provider-kairos
@@ -11,9 +15,9 @@
 
 stages:
   boot:
-    - name: "Install kube-vip auto-deploy manifest"
+    - name: "Stage kube-vip manifest template"
       files:
-        - path: /var/lib/rancher/k3s/server/manifests/kube-vip.yaml
+        - path: /etc/kairos-cluster/kube-vip.yaml.tmpl
           permissions: 0600
           owner: 0
           group: 0
@@ -90,7 +94,7 @@ stages:
                       args: ["manager"]
                       env:
                         - name: address
-                          value: "192.168.30.2"
+                          value: "@VIP@"
                         - name: port
                           value: "6443"
                         - name: vip_arp
@@ -112,3 +116,11 @@ stages:
                       securityContext:
                         capabilities:
                           add: ["NET_ADMIN", "NET_RAW"]
+    - name: "Render kube-vip manifest"
+      commands:
+        - |
+          . /etc/kairos-cluster/cluster.env
+          umask 077
+          mkdir -p /var/lib/rancher/k3s/server/manifests
+          sed "s|@VIP@|${VIP}|g" /etc/kairos-cluster/kube-vip.yaml.tmpl \
+              > /var/lib/rancher/k3s/server/manifests/kube-vip.yaml

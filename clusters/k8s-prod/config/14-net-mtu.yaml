@@ -1,0 +1,25 @@
+#cloud-config
+# Cluster fragment — CLUSTER-SPECIFIC (ADR 0012): only the prod network
+# needs this; the routed path into it carries less than 1500 bytes. The
+# DHCP server announces the effective MTU via option 26. networkd ignores
+# that option unless told otherwise — without this, large packets from and
+# to other networks are dropped silently.
+
+stages:
+  initramfs:
+    - name: "Honor DHCP-provided MTU"
+      files:
+        - path: /etc/systemd/network/20-dhcp.network.d/10-mtu.conf
+          permissions: 0644
+          owner: 0
+          group: 0
+          content: |
+            [DHCP]
+            UseMTU=true
+        - path: /etc/systemd/network/20-dhcp-legacy.network.d/10-mtu.conf
+          permissions: 0644
+          owner: 0
+          group: 0
+          content: |
+            [DHCP]
+            UseMTU=true

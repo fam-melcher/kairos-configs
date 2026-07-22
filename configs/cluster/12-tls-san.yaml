@@ -1,0 +1,17 @@
+#cloud-config
+# K3s tls-san renderer. Value-free and shared by all clusters (ADR 0013):
+# renders at boot from /etc/kairos-cluster/cluster.env (staged at install
+# time by the dispatcher from the cluster's 11-cluster.yaml values — the
+# boot stage runs strictly after initramfs). Renders idempotently on
+# every boot.
+
+stages:
+  boot:
+    - name: "Render K3s tls-san configuration"
+      commands:
+        - |
+          . /etc/kairos-cluster/cluster.env
+          umask 077
+          mkdir -p /etc/rancher/k3s/config.yaml.d
+          printf 'tls-san:\n  - %s\n  - %s\n' "${VIP}" "${DNS}" \
+              > /etc/rancher/k3s/config.yaml.d/10-env.yaml

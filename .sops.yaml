@@ -1,16 +1,23 @@
 # SOPS configuration — see docs/adr/0005-secret-management.md.
 #
-# BRANCH-SPECIFIC FILE (ADR 0009): recipients differ per environment so a
-# development ISO key can never decrypt production secrets.
+# One rule per cluster (ADR 0012): recipients differ per cluster directory
+# so a development ISO key can never decrypt production secrets — enforced
+# per path, identical on every branch.
 #
-# Recipients (production / main):
+# Recipients:
 #   age1t90ad9...  engineer key, private key in .keys/engineer.agekey
-#   age1rcc96p...  prod cluster key, embedded in the production installer ISO (ADR 0008)
+#   age1rcc96p...  k8s-prod cluster key, embedded in the prod installer ISO (ADR 0008)
+#   age1dh3dgv...  k8s-dev cluster key, embedded in the dev installer ISO (ADR 0008)
 #
-# After changing recipients: sops updatekeys secrets/*.sops.yaml
+# After changing recipients: sops updatekeys clusters/<name>/secrets/*.sops.yaml
+# New clusters get their rule appended by scripts/add-cluster.sh.
 
 creation_rules:
-  - path_regex: secrets/.*\.sops\.yaml$
+  - path_regex: clusters/k8s-prod/secrets/.*\.sops\.yaml$
     age: >-
       age1t90ad9cwcpmh6cxazpz6vl2ve3dsqpfgf9085q5ud0vr79lnn4xqsllump,
       age1rcc96pwzzly0x3kces5krytvn0dfdnrw2u2j8ahdffv49wm34ejql9z232
+  - path_regex: clusters/k8s-dev/secrets/.*\.sops\.yaml$
+    age: >-
+      age1t90ad9cwcpmh6cxazpz6vl2ve3dsqpfgf9085q5ud0vr79lnn4xqsllump,
+      age1dh3dgvss7epjy92kyfmdhdl7mandjxh7vry0zhczelq03ggdnyyqyzzt83
