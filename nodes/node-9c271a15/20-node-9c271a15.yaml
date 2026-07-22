@@ -1,0 +1,18 @@
+#cloud-config
+# Node-specific fragment. Copy to nodes/<hostname>/20-<hostname>.yaml and
+# replace every @VARIABLE@ placeholder (grep '@' must return nothing).
+
+hostname: "node-9c271a15"
+
+# Uncomment and adjust for static addressing; omit for DHCP.
+# stages:
+#   initramfs:
+#     - name: "Static network configuration"
+#       commands:
+#         - nmcli con mod "Wired connection 1" ipv4.method manual \
+#             ipv4.addresses @NODE_IP@/@NODE_PREFIX@ \
+#             ipv4.gateway @NODE_GATEWAY@ ipv4.dns "@NODE_DNS@"
+
+install:
+  # Target disk for this machine, e.g. /dev/nvme0n1 or /dev/sda.
+  device: "/dev/sda"
