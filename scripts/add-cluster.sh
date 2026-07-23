@@ -32,6 +32,10 @@ for tool in age-keygen sops openssl; do
     command -v "${tool}" > /dev/null 2>&1 || fail "${tool} not found"
 done
 
+# The one GitOps repo for the whole fleet (ADR 0015) — fixed, not a
+# per-cluster input.
+gitops_repo="https://github.com/fam-melcher/kairos-gitops"
+
 [[ $# -eq 2 ]] || fail "usage: add-cluster.sh <cluster-dns-name> <vip>"
 
 dns_name="${1}"
@@ -62,6 +66,8 @@ for tmpl in "${repo_root}/templates/cluster/"*.yaml.tmpl; do
     target="${cluster_dir}/config/$(basename "${tmpl}" .tmpl)"
     sed -e "s|@CLUSTER_DNS@|${dns_name}|g" \
         -e "s|@VIP@|${vip}|g" \
+        -e "s|@GITOPS_REPO@|${gitops_repo}|g" \
+        -e "s|@GITOPS_PATH@|clusters/${cluster}|g" \
         "${tmpl}" > "${target}"
     grep -q '@' "${target}" && fail "unresolved placeholder in ${target}"
 done
