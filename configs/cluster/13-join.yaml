@@ -7,7 +7,9 @@
 # 11-cluster.yaml — the boot stage runs strictly afterwards). Fetched by
 # the installer's dispatcher together with 10-server-join.yaml (ADR 0011)
 # — a cluster-init node must not carry a server entry, so this file must
-# never appear in a fragments.list. Renders idempotently on every boot.
+# never appear in a fragments.list. One-shot (ADR 0014): renders on this
+# node's first boot only, then deletes its own /oem fragment, so a later
+# VIP change made on the live cluster is not overwritten on reboot.
 
 stages:
   boot:
@@ -19,3 +21,4 @@ stages:
           mkdir -p /etc/rancher/k3s/config.yaml.d
           printf 'server: https://%s:6443\n' "${VIP}" \
               > /etc/rancher/k3s/config.yaml.d/20-join.yaml
+          rm -f /oem/13-join.yaml
