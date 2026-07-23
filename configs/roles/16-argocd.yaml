@@ -1,0 +1,67 @@
+#cloud-config
+# ArgoCD bootstrap (ADR 0015).
+# BOOTSTRAP-ROLE: installer-selected — never reference from fragments.list.
+#
+# Fetched by iso/dispatch.sh only in the genesis branch (mirrors
+# configs/cluster/13-join.yaml's join-only fetch) — only the node that
+# initialises the cluster needs to stage this; once applied, the
+# resulting objects live in the cluster's own etcd and every later node
+# sees them through the API (same reasoning ADR 0006 already relies on
+# for kube-vip).
+#
+# Value-free, renders at boot from /etc/kairos-cluster/cluster.env
+# (written in initramfs — ADR 0013). One-shot (ADR 0014): deletes its own
+# /oem fragment after applying once.
+#
+# kairos-gitops is public — no repo credential needed (ADR 0015).
+
+stages:
+  boot:
+    - name: "Stage ArgoCD manifest template"
+      files:
+        - path: /etc/kairos-cluster/argocd.yaml.tmpl
+          permissions: 0644
+          owner: 0
+          group: 0
+          content: |
+            apiVersion: helm.cattle.io/v1
+            kind: HelmChart
+            metadata:
+              name: argocd
+              namespace: kube-system
+            spec:
+              chart: argo-cd
+              repo: https://argoproj.github.io/argo-helm
+              version: "10.2.0"
+              targetNamespace: argocd
+            ---
+            apiVersion: argoproj.io/v1alpha1
+            kind: Application
+            metadata:
+              name: root
+              namespace: argocd
+            spec:
+              project: default
+              source:
+                repoURL: "@GITOPS_REPO@"
+                targetRevision: HEAD
+                path: "@GITOPS_PATH@"
+              destination:
+                server: https://kubernetes.default.svc
+                namespace: argocd
+              syncPolicy:
+                automated:
+                  prune: true
+                  selfHeal: true
+                syncOptions:
+                  - CreateNamespace=true
+    - name: "Render ArgoCD manifest"
+      commands:
+        - |
+          . /etc/kairos-cluster/cluster.env
+          umask 077
+          mkdir -p /var/lib/rancher/k3s/server/manifests
+          sed -e "s|@GITOPS_REPO@|${GITOPS_REPO}|g" -e "s|@GITOPS_PATH@|${GITOPS_PATH}|g" \
+              /etc/kairos-cluster/argocd.yaml.tmpl \
+              > /var/lib/rancher/k3s/server/manifests/argocd.yaml
+          rm -f /oem/16-argocd.yaml

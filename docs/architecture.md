@@ -7,8 +7,11 @@ Kairos nodes in the homelab. It covers OS-level provisioning (cloud-config),
 node roles, installer image building, and the strategy for handling secrets
 during bootstrap.
 
-Workload deployment (manifests, Helm releases, GitOps) is out of scope and
-will live in a separate repository once the cluster exists.
+Workload deployment (manifests, Helm releases, GitOps) is out of scope
+and lives in a separate repository (`kairos-gitops`) once the cluster
+exists. This repository's involvement stops at provisioning the GitOps
+controller itself (ADR 0015) — installing ArgoCD is provisioning, same
+category as installing k3s; what ArgoCD deploys is not.
 
 ## Goals
 
@@ -29,11 +32,12 @@ Linux OS. The target state (ADR 0006):
 - control plane nodes only (currently planned: four per cluster); every
   node is a K3s server with embedded etcd and also runs workloads
 - kube-vip in ARP mode provides each cluster's stable API endpoint (VIP in
-  `clusters/<name>/config/12-cluster.yaml`); node failure moves the VIP,
+  `clusters/<name>/config/11-cluster.yaml`); node failure moves the VIP,
   kubeconfigs never reference a node IP
 - two clusters (ADR 0012): `k8s-prod` on physical hardware, `k8s-dev` on
   Hyper-V VMs for testing changes before promotion
-- cluster workloads managed via GitOps in a follow-up repository
+- cluster workloads managed via GitOps (`kairos-gitops`, public),
+  bootstrapped automatically on the genesis node (ADR 0015)
 
 Kairos nodes are provisioned with cloud-config files. Kairos reads all
 cloud-config files available to the agent (e.g. from `/oem`) and merges them
@@ -55,7 +59,8 @@ layer configuration instead of duplicating it.
 │   │   └── 15-kube-vip.yaml      # kube-vip manifest renderer
 │   └── roles/              # cluster-neutral role fragments
 │       ├── 10-server-init.yaml   # --cluster-init; installer-selected (ADR 0011)
-│       └── 10-server-join.yaml   # joining server; installer-selected (ADR 0011)
+│       ├── 10-server-join.yaml   # joining server; installer-selected (ADR 0011)
+│       └── 16-argocd.yaml        # ArgoCD bootstrap; genesis-only, installer-selected (ADR 0015)
 ├── clusters/               # one directory per cluster (ADR 0012);
 │   └── <name>/             # name = first segment of the cluster DNS name
 │       ├── config/
@@ -107,6 +112,7 @@ at install time (ADR 0011) and the token is staged by the dispatcher:
 | Role    | `configs/roles/10-*.yaml`               | `10-`  | installer (ADR 0011) | K3s bootstrap role (init/join), cluster-neutral |
 | Values  | `clusters/<name>/config/11-cluster.yaml` | `11-` | fragments.list | THE cluster values: VIP + DNS name (ADR 0013) |
 | Cluster | `clusters/<name>/config/1[2-9]-*.yaml` + `configs/cluster/1[2-9]-*.yaml` | `12-`–`19-` | fragments.list, except `13-join.yaml` (installer) | cluster extras + shared value-free renderers (join target, kube-vip) |
+| GitOps bootstrap | `configs/roles/16-argocd.yaml` | `16-` | installer, genesis-only (ADR 0015) | ArgoCD HelmChart + root Application, value-free |
 | Node    | `clusters/<name>/nodes/node-<id>/20-*.yaml` | `20-` | fragments.list | hostname, install device, network              |
 | Token   | staged by the dispatcher                | `30-`  | dispatcher  | K3s cluster token (never committed)            |
 
@@ -177,7 +183,9 @@ Secrets are never committed in plaintext (ADR 0005):
   lint, cloud-config schema checks, placeholder checks
 - Netboot provisioning (AuroraBoot) replacing per-machine ISO boots
 - HashiCorp Vault for runtime secrets; SOPS remains for bootstrap secrets
-- GitOps repository (Flux or Argo CD) for cluster workloads
+- `kairos-gitops` content itself (AppProjects, further Applications,
+  ingress, Vault, CI runner) — this repo's job stops at ArgoCD existing
+  and pointed at the right path (ADR 0015)
 - LoadBalancer services via kube-vip (`svc_enable`), separate ADR
 - Node identity fallback for Apple Silicon (device-tree serial), extends
   ADR 0007

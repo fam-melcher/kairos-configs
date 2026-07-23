@@ -7,3 +7,5 @@
 values:
   vip: "192.168.1.11"
   dns: "k8s-dev.home.fam-melcher.net"
+  gitops-repo: "https://github.com/fam-melcher/kairos-gitops"
+  gitops-path: "clusters/k8s-dev"

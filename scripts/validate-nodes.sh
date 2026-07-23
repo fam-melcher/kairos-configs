@@ -32,7 +32,7 @@ command -v yq > /dev/null 2>&1 || {
 }
 
 marker="BOOTSTRAP-ROLE"
-known_bootstrap_names=("10-server-init.yaml" "10-server-join.yaml" "13-join.yaml")
+known_bootstrap_names=("10-server-init.yaml" "10-server-join.yaml" "13-join.yaml" "16-argocd.yaml")
 
 errors=0
 
@@ -98,6 +98,16 @@ for cluster_dir in "${repo_root}"/clusters/*/; do
         violation "clusters/${cluster}: no dns value in config/11-cluster.yaml"
     elif [[ "${dns_name%%.*}" != "${cluster}" ]]; then
         violation "clusters/${cluster}: directory name must equal the first segment of the dns value (got '${dns_name}')"
+    fi
+
+    gitops_repo="$(yq eval '.values.gitops-repo // ""' "${cluster_yaml}")"
+    if [[ -z "${gitops_repo}" ]]; then
+        violation "clusters/${cluster}: no gitops-repo value in config/11-cluster.yaml"
+    fi
+
+    gitops_path="$(yq eval '.values.gitops-path // ""' "${cluster_yaml}")"
+    if [[ -z "${gitops_path}" ]]; then
+        violation "clusters/${cluster}: no gitops-path value in config/11-cluster.yaml"
     fi
 done
 

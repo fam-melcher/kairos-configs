@@ -22,6 +22,7 @@ reference their replacement.
 | 0012 | [Cluster directories, branch stages](0012-cluster-directories-branch-stages.md) | Accepted (amended 2026-07-22) |
 | 0013 | [Single-source cluster values](0013-single-source-cluster-values.md) | Accepted (amended 2026-07-23) |
 | 0014 | [One-shot render of node-local cluster state](0014-one-shot-node-render.md) | Accepted |
+| 0015 | [ArgoCD bootstrap on the genesis node](0015-argocd-bootstrap.md) | Accepted |
 
 ## Creating a new ADR
 

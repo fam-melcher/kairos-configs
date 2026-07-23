@@ -270,6 +270,12 @@ if [ -z "${role_fragment}" ]; then
     echo "dispatch: genesis — no cluster answered after ${attempts} attempts, initialising a new cluster"
     role_fragment="configs/roles/10-server-init.yaml"
     rm -f "${join_file}"
+
+    # ArgoCD bootstrap (ADR 0015): genesis-only, mirrors the join_fragment
+    # fetch pattern above but for the opposite branch.
+    argocd_fragment="configs/roles/16-argocd.yaml"
+    fetch "${CONFIG_BASE_URL}/${argocd_fragment}" "${oem_dir}/$(basename "${argocd_fragment}")" \
+        || fail "failed to fetch ${argocd_fragment}"
 fi
 
 echo "dispatch: fetching ${role_fragment}"
