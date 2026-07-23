@@ -64,7 +64,8 @@ Option 3.
     renders it.
   Boot runs strictly after initramfs (where the generated values fragment
   writes `cluster.env`), so the values provably exist; all renders are
-  idempotent on every boot.
+  idempotent on every boot. (Amended 2026-07-23: "every boot" is now the
+  node's first boot only — [ADR 0014](0014-one-shot-node-render.md).)
 - The prod-only MTU settings left `12-cluster.yaml` (now gone) for their
   own fragment `clusters/k8s-prod/config/14-net-mtu.yaml`.
 - `fragments.list` is **composed, not templated**: `add-node.sh` builds it

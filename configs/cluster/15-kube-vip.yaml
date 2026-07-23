@@ -11,7 +11,13 @@
 # only deploys kube-vip in p2p coordination mode (internal/role/p2p/master.go),
 # which this repository does not use (see ADR 0006).
 #
-# The boot stage runs on every boot and rewrites the same file (idempotent).
+# One-shot (ADR 0014): staging the manifest once is enough — K3s's
+# auto-deploy controller applies it cluster-wide as a normal k8s resource,
+# so every node listing this fragment redundantly applying the same
+# content on its own first boot is harmless. Re-applying from this file on
+# every later boot is not: it would silently revert any VIP change an
+# operator makes on the live DaemonSet. Deletes its own /oem fragment
+# after the first apply.
 
 stages:
   boot:
@@ -124,3 +130,4 @@ stages:
           mkdir -p /var/lib/rancher/k3s/server/manifests
           sed "s|@VIP@|${VIP}|g" /etc/kairos-cluster/kube-vip.yaml.tmpl \
               > /var/lib/rancher/k3s/server/manifests/kube-vip.yaml
+          rm -f /oem/15-kube-vip.yaml

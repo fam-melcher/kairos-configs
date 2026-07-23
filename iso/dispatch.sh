@@ -139,7 +139,11 @@ yq="${script_dir}/yq"
 # /etc/kairos-cluster/cluster.env to the installed system. Lists and
 # nested maps are skipped (extend the yq filter here when a consumer
 # needs one). vip/dns_name are captured directly for the discovery step
-# below — no re-parsing of our own generated output.
+# below — no re-parsing of our own generated output. One-shot (ADR 0014):
+# a second initramfs step deletes this fragment's own /oem file right
+# after cluster.env is written, so it renders on this node's first boot
+# only — every later boot leaves cluster.env (and whatever an operator has
+# since changed downstream of it) alone.
 stage_cluster_values() {
     vip="$("${yq}" eval '.values.vip // ""' "${1}")"
     dns_name="$("${yq}" eval '.values.dns // ""' "${1}")"
@@ -170,6 +174,8 @@ stage_cluster_values() {
             | .stages.initramfs[0].files[0].owner = 0
             | .stages.initramfs[0].files[0].group = 0
             | .stages.initramfs[0].files[0].content = strenv(CLUSTER_ENV_CONTENT)
+            | .stages.initramfs[1].name = "Cluster values one-shot cleanup"
+            | .stages.initramfs[1].commands[0] = "rm -f /oem/11-cluster.yaml"
         '
     } > "${oem_dir}/11-cluster.yaml"
 

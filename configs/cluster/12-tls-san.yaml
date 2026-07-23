@@ -2,8 +2,11 @@
 # K3s tls-san renderer. Value-free and shared by all clusters (ADR 0013):
 # renders at boot from /etc/kairos-cluster/cluster.env (staged at install
 # time by the dispatcher from the cluster's 11-cluster.yaml values — the
-# boot stage runs strictly after initramfs). Renders idempotently on
-# every boot.
+# boot stage runs strictly after initramfs). One-shot (ADR 0014): every
+# server node needs its own first-boot render (each generates its own
+# dynamic serving cert locally), but re-rendering on later boots would
+# clobber any VIP change an operator makes on the live cluster. Deletes
+# its own /oem fragment after rendering once, so it never runs again.
 
 stages:
   boot:
@@ -15,3 +18,4 @@ stages:
           mkdir -p /etc/rancher/k3s/config.yaml.d
           printf 'tls-san:\n  - %s\n  - %s\n' "${VIP}" "${DNS}" \
               > /etc/rancher/k3s/config.yaml.d/10-env.yaml
+          rm -f /oem/12-tls-san.yaml
