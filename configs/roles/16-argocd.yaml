@@ -34,6 +34,7 @@ stages:
               repo: https://argoproj.github.io/argo-helm
               version: "10.2.0"
               targetNamespace: argocd
+              createNamespace: true
             ---
             apiVersion: argoproj.io/v1alpha1
             kind: Application
