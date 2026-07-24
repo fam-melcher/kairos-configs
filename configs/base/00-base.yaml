@@ -192,7 +192,6 @@ stages:
             [Unit]
             Description=Kairos node status screen
             Conflicts=getty@tty1.service
-            After=multi-user.target
 
             [Service]
             ExecStart=/usr/local/sbin/kairos-status
@@ -218,4 +217,9 @@ stages:
       commands:
         - systemctl mask --now getty@tty1.service getty@tty2.service getty@tty3.service getty@tty4.service getty@tty5.service getty@tty6.service
         - systemctl daemon-reload
-        - systemctl enable --now kairos-status.service
+        # Enable only, no --now: this boot stage runs before multi-user.target
+        # is ever reached, so a synchronous start here would block forever
+        # waiting on a target this very stage is a precondition of.
+        # WantedBy=multi-user.target in the unit starts it normally once that
+        # target is actually reached.
+        - systemctl enable kairos-status.service
