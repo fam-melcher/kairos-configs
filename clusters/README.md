@@ -73,3 +73,38 @@ polls the repository every 60 seconds.
 Run `scripts/add-node.sh <cluster> node-xxxxxxxx`, commit, push — the
 machine picks up its configuration on the next poll and installs without
 another boot. Machines without a repository entry never install anything.
+
+## Reinstalling an existing node (KNOWN ISSUE — no automation yet)
+
+Node ID is derived from the machine's SMBIOS product UUID (ADR 0010), so
+wiping and reinstalling the **same physical machine** reproduces its exact
+former hostname (`node-<id>`) and, most likely, the same DHCP-leased IP.
+K3s uses the node name as its etcd member name by default, and the etcd
+peer URL is `https://<node-ip>:2380` — both identical to the member the
+old install registered.
+
+If that old etcd member was never removed (powering a node off does
+**not** remove it — etcd just marks it unreachable and keeps counting it
+towards cluster membership), the reinstalled node's join attempt can
+collide with it: etcd rejects adding a member whose peer URL is already
+in use. The installer's dispatcher only checks the kube-apiserver's TLS
+SAN to decide join-vs-genesis (ADR 0011); it has no visibility into etcd
+membership and cannot detect or recover from this collision. Symptom:
+the reinstalled node's `k3s.service` fails to form/join etcd and keeps
+restarting — no error surfaces during install itself.
+
+**Before pulling a node for reinstall** (or as soon as it's known to be
+gone for good), remove it from the cluster first, from a surviving
+control-plane node:
+
+```sh
+kubectl delete node node-xxxxxxxx
+```
+
+K3s's own controller removes the corresponding etcd member when the Node
+object is deleted, so the cluster is left with a clean, correctly-sized
+etcd membership before the replacement joins. Skipping this step is what
+causes the collision above.
+
+There is no `scripts/remove-node.sh` counterpart to `add-node.sh` yet —
+this is a manual runbook step, not automated.
