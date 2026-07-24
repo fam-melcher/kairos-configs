@@ -11,6 +11,15 @@ jobs:
       - name: Repository invariants (ADR 0011)
         run: scripts/validate-nodes.sh
 
+  generated:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: kairos-status.sh embedded in 00-base.yaml matches source
+        run: |
+          scripts/render-base-fragment.sh
+          git diff --exit-code -- configs/base/00-base.yaml
+
   shellcheck:
     runs-on: ubuntu-latest
     steps:

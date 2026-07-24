@@ -250,6 +250,7 @@ dns_re="$(printf '%s' "${dns_name}" | sed 's/\./\\./g')"
 attempts="${DISCOVERY_ATTEMPTS:-6}"
 attempt=1
 role_fragment=""
+role_label=""
 while [ "${attempt}" -le "${attempts}" ]; do
     if probe_cluster; then
         echo "${san_list}" | grep -Eq "IP Address:${vip_re}(,|\$)" \
@@ -258,6 +259,7 @@ while [ "${attempt}" -le "${attempts}" ]; do
             || fail "cluster at ${vip}:6443 lacks DNS SAN ${dns_name} — refusing to join or initialise. SANs: ${san_list}"
         echo "dispatch: join — certificate SANs matched on attempt ${attempt}/${attempts}"
         role_fragment="configs/roles/10-server-join.yaml"
+        role_label="join (existing cluster found at ${vip})"
         mv "${join_file}" "${oem_dir}/$(basename "${join_fragment}")"
         break
     fi
@@ -269,6 +271,7 @@ done
 if [ -z "${role_fragment}" ]; then
     echo "dispatch: genesis — no cluster answered after ${attempts} attempts, initialising a new cluster"
     role_fragment="configs/roles/10-server-init.yaml"
+    role_label="genesis (initialising new cluster)"
     rm -f "${join_file}"
 
     # ArgoCD bootstrap (ADR 0015): genesis-only, mirrors the join_fragment
@@ -304,6 +307,32 @@ k3s:
 EOF
 
 echo "dispatch: configuration for ${node_id} staged in ${oem_dir}"
+
+# Final summary shown once the node's configuration was found and staged
+# (the polling status_screen above never fires in this case, since the
+# probe succeeds on the first try) — an operator watching the console
+# still needs to see what this node is about to become before it commits
+# to disk. GitOps repo/path is only shown on genesis: that is the node
+# ArgoCD gets bootstrapped from (ADR 0015); a joining node reuses the
+# cluster the genesis node already pointed at it.
+summary_screen() {
+    printf '\033[2J\033[H'
+    echo "=============================================================="
+    echo " Kairos installer — configuration found, starting install"
+    echo "=============================================================="
+    echo " Node ID      : ${node_id}"
+    echo " Role         : ${role_label}"
+    echo " Environment  : ${branch} / ${CLUSTER}"
+    if [ "${role_fragment}" = "configs/roles/10-server-init.yaml" ]; then
+        echo " GitOps repo  : ${CONFIG_BASE_URL}"
+        echo " Node path    : clusters/${CLUSTER}/nodes/${node_id}"
+    fi
+    echo " VIP / DNS    : ${vip} / ${dns_name}"
+    echo "=============================================================="
+    echo " Installing in 10s..."
+}
+summary_screen
+sleep 10
 
 # Hand the installation over to a dedicated transient unit instead of
 # blocking this yip stage: steps of a stage run interleaved, so blocking
