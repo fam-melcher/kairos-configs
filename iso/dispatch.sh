@@ -139,11 +139,17 @@ yq="${script_dir}/yq"
 # /etc/kairos-cluster/cluster.env to the installed system. Lists and
 # nested maps are skipped (extend the yq filter here when a consumer
 # needs one). vip/dns_name are captured directly for the discovery step
-# below — no re-parsing of our own generated output. One-shot (ADR 0014):
-# a second initramfs step deletes this fragment's own /oem file right
-# after cluster.env is written, so it renders on this node's first boot
-# only — every later boot leaves cluster.env (and whatever an operator has
-# since changed downstream of it) alone.
+# below — no re-parsing of our own generated output.
+#
+# Deliberately NOT one-shot (unlike ADR 0016's other consumers of this
+# file): /etc is Kairos's ephemeral overlay (reset from the read-only
+# sysroot on every boot, confirmed via mount(8) on an installed node), so
+# cluster.env would simply not exist after the first reboot if this only
+# ran once. Re-rendering it every boot from the same frozen install-time
+# values is harmless — it always reproduces the same content — and it is
+# the *downstream* consumers (tls-san, join target, kube-vip, ArgoCD),
+# which render into real persistent paths, that guard themselves against
+# re-running past their own first boot.
 stage_cluster_values() {
     vip="$("${yq}" eval '.values.vip // ""' "${1}")"
     dns_name="$("${yq}" eval '.values.dns // ""' "${1}")"
@@ -174,8 +180,6 @@ stage_cluster_values() {
             | .stages.initramfs[0].files[0].owner = 0
             | .stages.initramfs[0].files[0].group = 0
             | .stages.initramfs[0].files[0].content = strenv(CLUSTER_ENV_CONTENT)
-            | .stages.initramfs[1].name = "Cluster values one-shot cleanup"
-            | .stages.initramfs[1].commands[0] = "rm -f /oem/11-cluster.yaml"
         '
     } > "${oem_dir}/11-cluster.yaml"
 

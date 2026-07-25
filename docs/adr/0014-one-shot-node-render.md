@@ -1,6 +1,6 @@
 # 0014 — One-shot render of node-local cluster state
 
-- Status: Accepted
+- Status: Superseded by [0016](0016-one-shot-render-sentinel-fix.md)
 - Date: 2026-07-23
 
 ## Context
