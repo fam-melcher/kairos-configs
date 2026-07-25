@@ -1,5 +1,5 @@
 #cloud-config
-# ArgoCD bootstrap (ADR 0015).
+# ArgoCD bootstrap (ADR 0015; installation mechanism corrected — ADR 0017).
 # BOOTSTRAP-ROLE: installer-selected — never reference from fragments.list.
 #
 # Fetched by iso/dispatch.sh only in the genesis branch (mirrors
@@ -9,37 +9,36 @@
 # sees them through the API (same reasoning ADR 0006 already relies on
 # for kube-vip).
 #
-# Value-free, renders at boot from /etc/kairos-cluster/cluster.env
-# (written in initramfs — ADR 0013). One-shot (ADR 0016 — corrects ADR
-# 0014's mechanism, which never actually worked: Kairos merges every
-# staged /oem/*.yaml fragment into one /oem/90_custom.yaml at install
-# time, so "delete my own /oem/<name>.yaml" deletes a file that never
-# exists under that name again). Guarded by a sentinel file in /oem
-# itself (a real, persistent partition, unlike /etc) instead.
+# One-shot (ADR 0016 sentinel pattern). Applies ArgoCD's own official
+# install manifest directly via `kubectl apply --server-side` — the exact
+# mechanism ArgoCD's getting-started guide documents (verified, not
+# assumed: https://argo-cd.readthedocs.io/en/stable/getting_started/) —
+# instead of a persistent k3s HelmChart CR. A HelmChart CR is a standing,
+# continuously-reconciling controller; once ArgoCD's own Application took
+# over managing that same release afterward, it became a second, live,
+# permanent owner of the same objects with no clean way to retire it
+# (ADR 0017 — reproduced live: a stuck retirement hook Job left the
+# release stuck mid-handoff, then a forced recovery attempt caused ArgoCD
+# to prune its own entire installation with nothing left to bootstrap it
+# back). Applying the install manifest once, directly, leaves nothing
+# behind to retire — there is no second owner to begin with.
+#
+# ServerSideApply is required here for the same reason ArgoCD's own docs
+# require it once self-management takes over (some of these CRDs exceed
+# client-side apply's 262KB last-applied-configuration annotation limit).
 #
 # kairos-gitops is public — no repo credential needed (ADR 0015).
 
 stages:
   boot:
-    - name: "Stage ArgoCD manifest template"
+    - name: "Bootstrap ArgoCD (one-shot)"
+      if: '[ ! -f /oem/.rendered-16-argocd ]'
       files:
-        - path: /etc/kairos-cluster/argocd.yaml.tmpl
+        - path: /etc/kairos-cluster/argocd-root.yaml.tmpl
           permissions: 0644
           owner: 0
           group: 0
           content: |
-            apiVersion: helm.cattle.io/v1
-            kind: HelmChart
-            metadata:
-              name: argocd
-              namespace: kube-system
-            spec:
-              chart: argo-cd
-              repo: https://argoproj.github.io/argo-helm
-              version: "10.2.0"
-              targetNamespace: argocd
-              createNamespace: true
-            ---
             apiVersion: argoproj.io/v1alpha1
             kind: Application
             metadata:
@@ -60,14 +59,43 @@ stages:
                   selfHeal: true
                 syncOptions:
                   - CreateNamespace=true
-    - name: "Render ArgoCD manifest"
-      if: '[ ! -f /oem/.rendered-16-argocd ]'
       commands:
         - |
           . /etc/kairos-cluster/cluster.env
-          umask 077
-          mkdir -p /var/lib/rancher/k3s/server/manifests
+          export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+          # k3s.service's readiness relative to this boot stage isn't
+          # guaranteed — wait for the API server instead of assuming it's
+          # already up. Bounded (5 min) per the same "hooks/workloads need
+          # a deadline" reasoning ADR 0017 documents.
+          _attempt=1
+          until kubectl get --raw /healthz > /dev/null 2>&1; do
+              if [ "${_attempt}" -ge 150 ]; then
+                  echo "argocd bootstrap: kube-apiserver never became reachable" >&2
+                  exit 1
+              fi
+              _attempt=$((_attempt + 1))
+              sleep 2
+          done
+
+          kubectl create namespace argocd --dry-run=client -o yaml \
+              | kubectl apply --server-side --force-conflicts -f -
+
+          # Pinned to the exact ArgoCD release matching this cluster's
+          # argo-helm chart version (10.2.0 -> app v3.4.5, confirmed via
+          # the rendered chart's own image tag). Checksum verified against
+          # the real published file before use.
+          argocd_install_url="https://raw.githubusercontent.com/argoproj/argo-cd/v3.4.5/manifests/install.yaml"
+          argocd_install_sha256="cdf6758b489d25641c2a1fd835642543aaa64fe530867d0136a83ddf3dafe456"
+          argocd_install_file="$(mktemp)"
+          curl -fsSL "${argocd_install_url}" -o "${argocd_install_file}"
+          echo "${argocd_install_sha256}  ${argocd_install_file}" | sha256sum -c - \
+              || { echo "argocd bootstrap: install manifest checksum mismatch" >&2; exit 1; }
+          kubectl apply --server-side --force-conflicts -n argocd -f "${argocd_install_file}"
+          rm -f "${argocd_install_file}"
+
           sed -e "s|@GITOPS_REPO@|${GITOPS_REPO}|g" -e "s|@GITOPS_PATH@|${GITOPS_PATH}|g" \
-              /etc/kairos-cluster/argocd.yaml.tmpl \
-              > /var/lib/rancher/k3s/server/manifests/argocd.yaml
+              /etc/kairos-cluster/argocd-root.yaml.tmpl \
+              | kubectl apply --server-side --force-conflicts -f -
+
           touch /oem/.rendered-16-argocd
