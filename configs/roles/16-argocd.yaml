@@ -99,10 +99,20 @@ stages:
           # install manifest hit "connection refused" against repo-server,
           # and the resulting ComparisonError sat there uncorrected for
           # over two minutes (Argo's own selfHeal did not retry it on its
-          # own; a manual hard-refresh was needed to unstick it). Wait for
-          # repo-server's own readiness probe instead of assuming it's up.
-          kubectl wait --for=condition=ready pod \
-              -l app.kubernetes.io/name=argocd-repo-server -n argocd --timeout=300s \
+          # own; a manual hard-refresh was needed to unstick it).
+          #
+          # Wait on the Deployment's rollout, not `kubectl wait ... pod
+          # -l ...`: that command only waits for a POD matching the
+          # selector to reach a condition — if zero pods match yet (the
+          # Deployment controller hasn't created one, which is the normal
+          # state immediately after apply) it fails instantly rather than
+          # waiting for one to be created. Reproduced live on a real
+          # 3-node reinstall: the wait failed within the same second as
+          # the apply, this whole stage exited on it, and root was never
+          # applied on any of the 3 nodes. The Deployment object itself is
+          # guaranteed to exist immediately after apply, so waiting on its
+          # rollout has nothing to race.
+          kubectl rollout status deployment/argocd-repo-server -n argocd --timeout=300s \
               || { echo "argocd bootstrap: repo-server never became ready" >&2; exit 1; }
 
           sed -e "s|@GITOPS_REPO@|${GITOPS_REPO}|g" -e "s|@GITOPS_PATH@|${GITOPS_PATH}|g" \
