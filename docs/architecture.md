@@ -112,7 +112,7 @@ at install time (ADR 0011) and the token is staged by the dispatcher:
 | Role    | `configs/roles/10-*.yaml`               | `10-`  | installer (ADR 0011) | K3s bootstrap role (init/join), cluster-neutral |
 | Values  | `clusters/<name>/config/11-cluster.yaml` | `11-` | fragments.list | THE cluster values: VIP + DNS name (ADR 0013) |
 | Cluster | `clusters/<name>/config/1[2-9]-*.yaml` + `configs/cluster/1[2-9]-*.yaml` | `12-`–`19-` | fragments.list, except `13-join.yaml` (installer) | cluster extras + shared value-free renderers (join target, kube-vip) |
-| GitOps bootstrap | `configs/roles/16-argocd.yaml` | `16-` | installer, genesis-only (ADR 0015) | ArgoCD HelmChart + root Application, value-free |
+| GitOps bootstrap | `configs/roles/16-argocd.yaml` | `16-` | installer, genesis-only (ADR 0015, ADR 0017) | ArgoCD install manifest (kubectl apply, one-shot) + root Application, value-free |
 | Node    | `clusters/<name>/nodes/node-<id>/20-*.yaml` | `20-` | fragments.list | hostname, install device, network              |
 | Token   | staged by the dispatcher                | `30-`  | dispatcher  | K3s cluster token (never committed)            |
 

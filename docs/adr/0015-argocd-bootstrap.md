@@ -1,6 +1,6 @@
 # 0015 — ArgoCD bootstrap on the genesis node
 
-- Status: Accepted
+- Status: Accepted (installation mechanism corrected by [0017](0017-argocd-bootstrap-one-shot-apply.md) — the decision to bootstrap ArgoCD on the genesis node, pointed at kairos-gitops, still stands)
 - Date: 2026-07-23
 
 ## Context
