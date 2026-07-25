@@ -217,9 +217,16 @@ stages:
       commands:
         - systemctl mask --now getty@tty1.service getty@tty2.service getty@tty3.service getty@tty4.service getty@tty5.service getty@tty6.service
         - systemctl daemon-reload
-        # Enable only, no --now: this boot stage runs before multi-user.target
-        # is ever reached, so a synchronous start here would block forever
-        # waiting on a target this very stage is a precondition of.
-        # WantedBy=multi-user.target in the unit starts it normally once that
-        # target is actually reached.
-        - systemctl enable kairos-status.service
+        # --now is safe here: the unit carries no explicit After= on
+        # multi-user.target (that line was removed — it was the actual
+        # cause of an earlier boot deadlock, not the --now itself).
+        # Conflicts= and WantedBy= impose no ordering by themselves, so
+        # `systemctl start` has nothing of ours to wait on and runs
+        # immediately. Plain `enable` (no --now) was tried and is wrong:
+        # it only symlinks the unit into multi-user.target.wants — on a
+        # freshly installed node that symlink is created after
+        # multi-user.target has already been reached this boot, so
+        # nothing ever actually starts the unit until a second reboot
+        # that may never happen. Confirmed live: status screen never
+        # appeared on a freshly installed node's first boot.
+        - systemctl enable --now kairos-status.service
