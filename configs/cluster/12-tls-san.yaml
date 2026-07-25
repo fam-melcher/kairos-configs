@@ -2,15 +2,19 @@
 # K3s tls-san renderer. Value-free and shared by all clusters (ADR 0013):
 # renders at boot from /etc/kairos-cluster/cluster.env (staged at install
 # time by the dispatcher from the cluster's 11-cluster.yaml values — the
-# boot stage runs strictly after initramfs). One-shot (ADR 0014): every
-# server node needs its own first-boot render (each generates its own
-# dynamic serving cert locally), but re-rendering on later boots would
-# clobber any VIP change an operator makes on the live cluster. Deletes
-# its own /oem fragment after rendering once, so it never runs again.
+# boot stage runs strictly after initramfs). One-shot (ADR 0016 — corrects
+# ADR 0014's mechanism, which never actually worked: Kairos merges every
+# staged /oem/*.yaml fragment into one /oem/90_custom.yaml at install
+# time, so "delete my own /oem/<name>.yaml" deletes a file that never
+# exists under that name again — this stage kept re-running, and
+# re-rendering on later boots would clobber any VIP change an operator
+# makes on the live cluster). Guarded by a sentinel file in /oem itself
+# (a real, persistent partition, unlike /etc) instead.
 
 stages:
   boot:
     - name: "Render K3s tls-san configuration"
+      if: '[ ! -f /oem/.rendered-12-tls-san ]'
       commands:
         - |
           . /etc/kairos-cluster/cluster.env
@@ -18,4 +22,4 @@ stages:
           mkdir -p /etc/rancher/k3s/config.yaml.d
           printf 'tls-san:\n  - %s\n  - %s\n' "${VIP}" "${DNS}" \
               > /etc/rancher/k3s/config.yaml.d/10-env.yaml
-          rm -f /oem/12-tls-san.yaml
+          touch /oem/.rendered-12-tls-san
