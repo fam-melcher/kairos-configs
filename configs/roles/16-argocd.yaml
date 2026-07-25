@@ -81,10 +81,10 @@ stages:
           kubectl create namespace argocd --dry-run=client -o yaml \
               | kubectl apply --server-side --force-conflicts -f -
 
-          # Pinned to the exact ArgoCD release matching this cluster's
-          # argo-helm chart version (10.2.0 -> app v3.4.5, confirmed via
-          # the rendered chart's own image tag). Checksum verified against
-          # the real published file before use.
+          # Pinned to the tag kairos-gitops's own "argocd" Application
+          # targets too (its version-patch.yaml, per cluster) — no version
+          # drift the instant self-management takes over. Checksum
+          # verified against the real published file before use.
           argocd_install_url="https://raw.githubusercontent.com/argoproj/argo-cd/v3.4.5/manifests/install.yaml"
           argocd_install_sha256="cdf6758b489d25641c2a1fd835642543aaa64fe530867d0136a83ddf3dafe456"
           argocd_install_file="$(mktemp)"
@@ -93,6 +93,17 @@ stages:
               || { echo "argocd bootstrap: install manifest checksum mismatch" >&2; exit 1; }
           kubectl apply --server-side --force-conflicts -n argocd -f "${argocd_install_file}"
           rm -f "${argocd_install_file}"
+
+          # root's very first comparison races repo-server's own startup
+          # otherwise — reproduced live: applying root ~3s after the
+          # install manifest hit "connection refused" against repo-server,
+          # and the resulting ComparisonError sat there uncorrected for
+          # over two minutes (Argo's own selfHeal did not retry it on its
+          # own; a manual hard-refresh was needed to unstick it). Wait for
+          # repo-server's own readiness probe instead of assuming it's up.
+          kubectl wait --for=condition=ready pod \
+              -l app.kubernetes.io/name=argocd-repo-server -n argocd --timeout=300s \
+              || { echo "argocd bootstrap: repo-server never became ready" >&2; exit 1; }
 
           sed -e "s|@GITOPS_REPO@|${GITOPS_REPO}|g" -e "s|@GITOPS_PATH@|${GITOPS_PATH}|g" \
               /etc/kairos-cluster/argocd-root.yaml.tmpl \
