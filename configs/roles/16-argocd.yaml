@@ -10,8 +10,12 @@
 # for kube-vip).
 #
 # Value-free, renders at boot from /etc/kairos-cluster/cluster.env
-# (written in initramfs — ADR 0013). One-shot (ADR 0014): deletes its own
-# /oem fragment after applying once.
+# (written in initramfs — ADR 0013). One-shot (ADR 0016 — corrects ADR
+# 0014's mechanism, which never actually worked: Kairos merges every
+# staged /oem/*.yaml fragment into one /oem/90_custom.yaml at install
+# time, so "delete my own /oem/<name>.yaml" deletes a file that never
+# exists under that name again). Guarded by a sentinel file in /oem
+# itself (a real, persistent partition, unlike /etc) instead.
 #
 # kairos-gitops is public — no repo credential needed (ADR 0015).
 
@@ -57,6 +61,7 @@ stages:
                 syncOptions:
                   - CreateNamespace=true
     - name: "Render ArgoCD manifest"
+      if: '[ ! -f /oem/.rendered-16-argocd ]'
       commands:
         - |
           . /etc/kairos-cluster/cluster.env
@@ -65,4 +70,4 @@ stages:
           sed -e "s|@GITOPS_REPO@|${GITOPS_REPO}|g" -e "s|@GITOPS_PATH@|${GITOPS_PATH}|g" \
               /etc/kairos-cluster/argocd.yaml.tmpl \
               > /var/lib/rancher/k3s/server/manifests/argocd.yaml
-          rm -f /oem/16-argocd.yaml
+          touch /oem/.rendered-16-argocd

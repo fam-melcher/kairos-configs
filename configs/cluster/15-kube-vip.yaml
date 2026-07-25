@@ -11,13 +11,17 @@
 # only deploys kube-vip in p2p coordination mode (internal/role/p2p/master.go),
 # which this repository does not use (see ADR 0006).
 #
-# One-shot (ADR 0014): staging the manifest once is enough — K3s's
-# auto-deploy controller applies it cluster-wide as a normal k8s resource,
-# so every node listing this fragment redundantly applying the same
-# content on its own first boot is harmless. Re-applying from this file on
-# every later boot is not: it would silently revert any VIP change an
-# operator makes on the live DaemonSet. Deletes its own /oem fragment
-# after the first apply.
+# One-shot (ADR 0016 — corrects ADR 0014's mechanism, which never
+# actually worked: Kairos merges every staged /oem/*.yaml fragment into
+# one /oem/90_custom.yaml at install time, so "delete my own
+# /oem/<name>.yaml" deletes a file that never exists under that name
+# again). Staging the manifest once is enough — K3s's auto-deploy
+# controller applies it cluster-wide as a normal k8s resource, so every
+# node listing this fragment redundantly applying the same content on its
+# own first boot is harmless. Re-applying from this file on every later
+# boot is not: it silently reverted any VIP change an operator made on
+# the live DaemonSet, every single boot. Guarded by a sentinel file in
+# /oem itself (a real, persistent partition, unlike /etc) instead.
 
 stages:
   boot:
@@ -123,6 +127,7 @@ stages:
                         capabilities:
                           add: ["NET_ADMIN", "NET_RAW"]
     - name: "Render kube-vip manifest"
+      if: '[ ! -f /oem/.rendered-15-kube-vip ]'
       commands:
         - |
           . /etc/kairos-cluster/cluster.env
@@ -130,4 +135,4 @@ stages:
           mkdir -p /var/lib/rancher/k3s/server/manifests
           sed "s|@VIP@|${VIP}|g" /etc/kairos-cluster/kube-vip.yaml.tmpl \
               > /var/lib/rancher/k3s/server/manifests/kube-vip.yaml
-          rm -f /oem/15-kube-vip.yaml
+          touch /oem/.rendered-15-kube-vip
